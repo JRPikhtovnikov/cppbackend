@@ -4,7 +4,7 @@
 #endif
 
 // boost.beast будет использовать std::string_view вместо boost::string_view
-//#define BOOST_NO_CXX17_HDR_STRING_VIEW
+#define BOOST_BEAST_USE_STD_STRING_VIEW
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/signal_set.hpp>
@@ -75,7 +75,7 @@ StringResponse HandleRequest(StringRequest&& req) {
         return response;
     }
 
-    std::string_view target = static_cast<std::string_view>(req.target());
+    std::string_view target = req.target();
     if (!target.empty() && target[0] == '/') {
         target.remove_prefix(1);
     }
