@@ -2,7 +2,7 @@
 #include "http_server.h"
 #include "model.h"
 #include <boost/json.hpp>
-#include <boost/beast/core/string_type.hpp> // for boost::beast::string_view
+#include <boost/beast/core/string_type.hpp>
 
 
 namespace api {
@@ -98,8 +98,7 @@ private:
             return SendMethodNotAllowed(req, std::forward<Send>(send));
         }
         
-
-        const auto target = req.target();
+        const auto target = req.target(); // beast::string_view
 
         if (target == api::MAPS || target == api::MAPS_SLASH) {
             return SendMapsList(req, std::forward<Send>(send));
@@ -113,11 +112,11 @@ private:
             return SendMapInfo(req, std::string(id), std::forward<Send>(send));
         }
 
-    if (target.starts_with(api::API_PREFIX)) {
+        if (target.starts_with(api::API_PREFIX)) {
             return SendBadRequest(req, "Bad request", std::forward<Send>(send));
         }
 
-        return SendNotFound(req, std::string(target), std::forward<Send>(send));
+            return SendNotFound(req, std::string(target), std::forward<Send>(send));
     }
     
     template <typename Body, typename Allocator, typename Send>
