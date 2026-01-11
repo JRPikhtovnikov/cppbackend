@@ -60,16 +60,20 @@ model::Office ParseOffice(const json::value& office_json) {
 }
 
 model::Game LoadGame(const std::filesystem::path& json_path) {
-    // Загружаем содержимое файла
     std::string json_str = LoadFile(json_path);
-    
-    // Парсим JSON
-    json::value json_value = json::parse(json_str);
+    json::value json_value;
+
+    try {
+        json_value = json::parse(json_str);
+    } catch (const std::exception& e) {
+        throw std::runtime_error(
+            "JSON parse error in file " + json_path.string() + ": " + e.what()
+        );
+    }
     const json::object& root = json_value.as_object();
     
     model::Game game;
     
-    // Обрабатываем карты
     const json::array& maps_array = root.at("maps").as_array();
     
     for (const auto& map_json : maps_array) {
@@ -80,25 +84,21 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
         
         model::Map map(model::Map::Id{id}, name);
         
-        // Добавляем дороги
         const json::array& roads_array = map_obj.at("roads").as_array();
         for (const auto& road_json : roads_array) {
             map.AddRoad(ParseRoad(road_json));
         }
         
-        // Добавляем здания
         const json::array& buildings_array = map_obj.at("buildings").as_array();
         for (const auto& building_json : buildings_array) {
             map.AddBuilding(ParseBuilding(building_json));
         }
         
-        // Добавляем офисы
         const json::array& offices_array = map_obj.at("offices").as_array();
         for (const auto& office_json : offices_array) {
             map.AddOffice(ParseOffice(office_json));
         }
         
-        // Добавляем карту в игру
         game.AddMap(std::move(map));
     }
     

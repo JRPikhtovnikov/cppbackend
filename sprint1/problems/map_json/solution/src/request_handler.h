@@ -5,6 +5,12 @@
 
 #define BOOST_NO_CXX17_HDR_STRING_VIEW
 
+namespace api {
+    constexpr std::string_view MAPS = "/api/v1/maps";
+    constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
+    constexpr std::string_view API_PREFIX = "/api/";
+}
+
 namespace http_handler {
 
 namespace beast = boost::beast;
@@ -25,48 +31,91 @@ public:
 
     template <typename Body, typename Allocator, typename Send>
     void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        // Обработать запрос request и отправить ответ, используя send
         HandleRequest(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
     }
 
 private:
     model::Game& game_;
+
+    json::array SerializeRoads(const model::Map& map) {
+        json::array roads_json;
+
+        for (const auto& road : map.GetRoads()) {
+            json::object road_obj;
+            road_obj["x0"] = road.GetStart().x;
+            road_obj["y0"] = road.GetStart().y;
+
+            if (road.IsHorizontal()) {
+                road_obj["x1"] = road.GetEnd().x;
+            } else {
+                road_obj["y1"] = road.GetEnd().y;
+            }
+
+            roads_json.push_back(std::move(road_obj));
+        }
+
+        return roads_json;
+    }
+
+    json::array SerializeBuildings(const model::Map& map) {
+        json::array buildings_json;
+
+        for (const auto& building : map.GetBuildings()) {
+            json::object building_obj;
+            building_obj["x"] = building.GetBounds().position.x;
+            building_obj["y"] = building.GetBounds().position.y;
+            building_obj["w"] = building.GetBounds().size.width;
+            building_obj["h"] = building.GetBounds().size.height;
+            buildings_json.push_back(std::move(building_obj));
+        }
+
+        return buildings_json;
+    }
+
+    json::array SerializeOffices(const model::Map& map) {
+        json::array offices_json;
+
+        for (const auto& office : map.GetOffices()) {
+            json::object office_obj;
+            office_obj["id"] = *office.GetId();
+            office_obj["x"] = office.GetPosition().x;
+            office_obj["y"] = office.GetPosition().y;
+            office_obj["offsetX"] = office.GetOffset().dx;
+            office_obj["offsetY"] = office.GetOffset().dy;
+            offices_json.push_back(std::move(office_obj));
+        }
+
+        return offices_json;
+    }
+
     
-    // Основной метод обработки запроса
     template <typename Body, typename Allocator, typename Send>
     void HandleRequest(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
-        // Проверяем, что это GET-запрос
         if (req.method() != http::verb::get) {
             return SendMethodNotAllowed(req, std::forward<Send>(send));
         }
         
         const auto target = req.target();
         
-        // Обработка /api/v1/maps
-        if (target == "/api/v1/maps" || target == "/api/v1/maps/") {
+        if (target == api::MAPS || target == api::MAPS + "/") {
             return SendMapsList(req, std::forward<Send>(send));
         }
         
-        // Обработка /api/v1/maps/{id}
-        if (target.starts_with("/api/v1/maps/")) {
-            // Извлекаем id из пути
+        if (target.starts_with(api::MAPS_PREFIX)) {
             auto id = target.substr(std::string_view("/api/v1/maps/").size());
             if (!id.empty() && id.back() == '/') {
-                id.remove_suffix(1); // Убираем завершающий слэш
+                id.remove_suffix(1);
             }
             return SendMapInfo(req, std::string(id), std::forward<Send>(send));
         }
         
-        // Если путь начинается с /api/ но не соответствует известным маршрутам
-        if (target.starts_with("/api/")) {
+        if (target.starts_with(api::API_PREFIX)) {
             return SendBadRequest(req, "Bad request", std::forward<Send>(send));
         }
         
-        // Для всех остальных запросов - 404 Not Found
         return SendNotFound(req, std::string(target.data(), target.size()), std::forward<Send>(send));
     }
     
-    // Отправка списка карт
     template <typename Body, typename Allocator, typename Send>
     void SendMapsList(const http::request<Body, http::basic_fields<Allocator>>& req, Send&& send) {
         json::array maps_json;
@@ -86,15 +135,12 @@ private:
         send(std::move(response));
     }
     
-    // Отправка информации о конкретной карте
     template <typename Body, typename Allocator, typename Send>
     void SendMapInfo(const http::request<Body, http::basic_fields<Allocator>>& req, 
                      std::string map_id, Send&& send) {
-        // Ищем карту по id
         const auto* map = game_.FindMap(model::Map::Id{std::move(map_id)});
         
         if (!map) {
-            // Карта не найдена
             json::object error;
             error["code"] = "mapNotFound";
             error["message"] = "Map not found";
@@ -107,52 +153,13 @@ private:
             return send(std::move(response));
         }
         
-        // Создаем JSON объект карты
         json::object map_json;
         map_json["id"] = *map->GetId();
         map_json["name"] = map->GetName();
-        
-        // Добавляем дороги
-        json::array roads_json;
-        for (const auto& road : map->GetRoads()) {
-            json::object road_obj;
-            if (road.IsHorizontal()) {
-                road_obj["x0"] = road.GetStart().x;
-                road_obj["y0"] = road.GetStart().y;
-                road_obj["x1"] = road.GetEnd().x;
-            } else {
-                road_obj["x0"] = road.GetStart().x;
-                road_obj["y0"] = road.GetStart().y;
-                road_obj["y1"] = road.GetEnd().y;
-            }
-            roads_json.push_back(std::move(road_obj));
-        }
-        map_json["roads"] = std::move(roads_json);
-        
-        // Добавляем здания
-        json::array buildings_json;
-        for (const auto& building : map->GetBuildings()) {
-            json::object building_obj;
-            building_obj["x"] = building.GetBounds().position.x;
-            building_obj["y"] = building.GetBounds().position.y;
-            building_obj["w"] = building.GetBounds().size.width;
-            building_obj["h"] = building.GetBounds().size.height;
-            buildings_json.push_back(std::move(building_obj));
-        }
-        map_json["buildings"] = std::move(buildings_json);
-        
-        // Добавляем офисы
-        json::array offices_json;
-        for (const auto& office : map->GetOffices()) {
-            json::object office_obj;
-            office_obj["id"] = *office.GetId();
-            office_obj["x"] = office.GetPosition().x;
-            office_obj["y"] = office.GetPosition().y;
-            office_obj["offsetX"] = office.GetOffset().dx;
-            office_obj["offsetY"] = office.GetOffset().dy;
-            offices_json.push_back(std::move(office_obj));
-        }
-        map_json["offices"] = std::move(offices_json);
+
+        map_json["roads"] = SerializeRoads(*map);
+        map_json["buildings"] = SerializeBuildings(*map);
+        map_json["offices"] = SerializeOffices(*map);
         
         StringResponse response(http::status::ok, req.version());
         response.set(http::field::content_type, "application/json");
@@ -162,7 +169,6 @@ private:
         send(std::move(response));
     }
     
-    // Отправка ошибки 400 Bad Request
     template <typename Body, typename Allocator, typename Send>
     void SendBadRequest(const http::request<Body, http::basic_fields<Allocator>>& req,
                         std::string_view message, Send&& send) {
@@ -178,7 +184,6 @@ private:
         send(std::move(response));
     }
     
-    // Отправка ошибки 404 Not Found
     template <typename Body, typename Allocator, typename Send>
     void SendNotFound(const http::request<Body, http::basic_fields<Allocator>>& req,
                       std::string_view target, Send&& send) {
@@ -194,7 +199,6 @@ private:
         send(std::move(response));
     }
     
-    // Отправка ошибки 405 Method Not Allowed
     template <typename Body, typename Allocator, typename Send>
     void SendMethodNotAllowed(const http::request<Body, http::basic_fields<Allocator>>& req,
                               Send&& send) {
