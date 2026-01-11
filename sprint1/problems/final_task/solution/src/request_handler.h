@@ -11,7 +11,7 @@ namespace api {
     constexpr string_view MAPS        = "/api/v1/maps";
     constexpr string_view MAPS_SLASH  = "/api/v1/maps/";
     constexpr string_view MAPS_PREFIX = "/api/v1/maps/";
-    constexpr string_view API_PREFIX  = "/api/v1/";
+    constexpr string_view API_PREFIX  = "/api/";
 }
 
 namespace http_handler {
