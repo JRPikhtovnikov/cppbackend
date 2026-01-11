@@ -2,13 +2,16 @@
 #include "http_server.h"
 #include "model.h"
 #include <boost/json.hpp>
+#include <boost/beast/core/string_type.hpp>
 
-#define BOOST_NO_CXX17_HDR_STRING_VIEW
 
 namespace api {
-    constexpr std::string_view MAPS = "/api/v1/maps";
-    constexpr std::string_view MAPS_PREFIX = "/api/v1/maps/";
-    constexpr std::string_view API_PREFIX = "/api/";
+    using boost::beast::string_view;
+
+    constexpr string_view MAPS        = "/api/v1/maps";
+    constexpr string_view MAPS_SLASH  = "/api/v1/maps/";
+    constexpr string_view MAPS_PREFIX = "/api/v1/maps/";
+    constexpr string_view API_PREFIX  = "/api/v1/";
 }
 
 namespace http_handler {
@@ -96,24 +99,24 @@ private:
         }
         
         const auto target = req.target();
-        
-        if (target == api::MAPS || target == api::MAPS + "/") {
+
+        if (target == api::MAPS || target == api::MAPS_SLASH) {
             return SendMapsList(req, std::forward<Send>(send));
         }
-        
+
         if (target.starts_with(api::MAPS_PREFIX)) {
-            auto id = target.substr(std::string_view("/api/v1/maps/").size());
+            auto id = target.substr(api::MAPS_SLASH.size());
             if (!id.empty() && id.back() == '/') {
                 id.remove_suffix(1);
             }
             return SendMapInfo(req, std::string(id), std::forward<Send>(send));
         }
-        
+
         if (target.starts_with(api::API_PREFIX)) {
             return SendBadRequest(req, "Bad request", std::forward<Send>(send));
         }
-        
-        return SendNotFound(req, std::string(target.data(), target.size()), std::forward<Send>(send));
+
+            return SendNotFound(req, std::string(target), std::forward<Send>(send));
     }
     
     template <typename Body, typename Allocator, typename Send>
