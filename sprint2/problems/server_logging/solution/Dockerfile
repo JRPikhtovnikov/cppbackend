@@ -1,5 +1,5 @@
 # Не просто создаём образ, но даём ему имя build
-FROM gcc:11.3 as build
+FROM gcc:11.3 AS build
 
 RUN apt update && \
     apt install -y \
@@ -11,7 +11,7 @@ RUN apt update && \
 # Запуск conan как раньше
 COPY conanfile.txt /app/
 RUN mkdir /app/build && cd /app/build && \
-    conan install .. --build=missing
+    conan install .. --build=missing -s build_type=Release -s compiler.libcxx=libstdc++11
 
 # Папка data больше не нужна
 COPY ./src /app/src
@@ -22,7 +22,7 @@ RUN cd /app/build && \
     cmake --build .
 
 # Второй контейнер в том же докерфайле
-FROM ubuntu:22.04 as run
+FROM ubuntu:22.04 AS run
 
 # Создадим пользователя www
 RUN groupadd -r www && useradd -r -g www www
@@ -32,6 +32,7 @@ USER www
 # Не забываем также папку data, она пригодится.
 COPY --from=build /app/build/bin/game_server /app/
 COPY ./data /app/data
+COPY ./static /app/static
 
 # Запускаем игровой сервер
-ENTRYPOINT ["/app/game_server", "/app/data/config.json"] 
+ENTRYPOINT ["/app/game_server", "/app/data/config.json", "/app/static/"]
