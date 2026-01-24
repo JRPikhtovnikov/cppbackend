@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.11)
 project(game_server CXX)
 set(CMAKE_CXX_STANDARD 20)
 
-# Conan 1 (generator "cmake") -> conanbuildinfo.cmake + переменная CONAN_LIBS
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
@@ -28,13 +27,10 @@ add_executable(game_server
     src/logger.h
 )
 
-# Сначала системные штуки
 target_link_libraries(game_server PRIVATE
     Threads::Threads
     dl
+    "-Wl,--start-group"
+    ${CONAN_LIBS}
+    "-Wl,--end-group"
 )
-
-# Для статических архивов Conan/Boost: несколько проходов по .a, чтобы не было undefined reference
-target_link_options(game_server PRIVATE "-Wl,--start-group")
-target_link_libraries(game_server PRIVATE ${CONAN_LIBS})
-target_link_options(game_server PRIVATE "-Wl,--end-group")
