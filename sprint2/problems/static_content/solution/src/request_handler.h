@@ -129,7 +129,8 @@ private:
         } else {
             // Обрабатываем как статический файл
             HttpSendHandler<Send> send_handler(std::forward<Send>(send));
-            std::string method_str = boost::beast::http::to_string(method);
+            auto method_sv = boost::beast::http::to_string(method);
+            std::string method_str(method_sv.data(), method_sv.size());
             static_handler_.HandleFileRequest(
                 std::string(target),
                 method_str,
