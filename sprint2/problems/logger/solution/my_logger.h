@@ -11,6 +11,8 @@
 #include <string_view>
 #include <utility>
 
+#define LOG(...) Logger::GetInstance().Log(__VA_ARGS__)
+
 class Logger {
 public:
     using Clock = std::chrono::system_clock;
