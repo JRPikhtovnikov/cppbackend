@@ -28,7 +28,7 @@ add_executable(game_server
 	src/request_handler.h
 	src/file_handler.h
 	src/file_handler.cpp
-	src/logging_request_handle.h
+	src/logging_request_handler.h
 	src/logging.h
 )
 target_link_libraries(game_server PRIVATE Threads::Threads)
