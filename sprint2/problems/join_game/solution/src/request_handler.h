@@ -70,6 +70,7 @@ private:
 
     model::Players players_;
     model::PlayerTokens tokens_;
+    model::GameSessions sessions_;
     model::Player::Id next_player_id_{0};
 
 private:
@@ -255,8 +256,11 @@ private:
                                   "mapNotFound", "Map not found"));
         }
 
+        auto& session = sessions_.GetOrCreateByMap(model::Map::Id{map_id});
         const auto pid = next_player_id_++;
-        players_.Add(pid, user_name, model::Map::Id{map_id});
+        
+        players_.Add(pid, user_name, session.GetId());
+        session.AddPlayer(pid);
 
         model::Token token = tokens_.GenerateToken();
         while (!model::IsHex32(*token)) {
@@ -310,16 +314,22 @@ private:
         const model::Player* me = players_.Find(*player_id_opt);
         if (!me) {
             return send(MakeError(http::status::unauthorized, req,
-                                  "unknownToken", "Player token has not been found"));
+                                "unknownToken", "Player token has not been found"));
         }
 
-        const auto same_map = players_.GetByMap(me->GetMapId());
+        const model::GameSession* session = sessions_.Find(me->GetSessionId());
+        if (!session) {
+            return send(MakeError(http::status::unauthorized, req,
+                                "unknownToken", "Player token has not been found"));
+        }
 
         json::object result;
-        for (const model::Player* p : same_map) {
-            json::object v;
-            v["name"] = p->GetName();
-            result[std::to_string(p->GetId())] = std::move(v);
+        for (auto pid : session->GetPlayers()) {
+            if (const model::Player* p = players_.Find(pid)) {
+                json::object v;
+                v["name"] = p->GetName();
+                result[std::to_string(p->GetId())] = std::move(v);
+            }
         }
 
         return send(MakeJsonResponse(http::status::ok, req, result));

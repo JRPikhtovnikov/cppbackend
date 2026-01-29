@@ -211,49 +211,94 @@ inline bool IsHex32(const std::string& s) {
     return true;
 }
 
+using PlayerId  = std::uint32_t;
+using SessionId = std::uint32_t;
+class GameSession {
+public:
+    GameSession(SessionId id, Map::Id map_id)
+        : id_(id)
+        , map_id_(std::move(map_id)) {
+    }
+
+    SessionId GetId() const noexcept { return id_; }
+    const Map::Id& GetMapId() const noexcept { return map_id_; }
+
+    void AddPlayer(PlayerId pid) {
+        player_ids_.push_back(pid);
+    }
+
+    const std::vector<PlayerId>& GetPlayers() const noexcept {
+        return player_ids_;
+    }
+
+private:
+    SessionId id_;
+    Map::Id map_id_;
+    std::vector<PlayerId> player_ids_;
+};
+
+class GameSessions {
+public:
+    GameSession& GetOrCreateByMap(const Map::Id& map_id) {
+        if (auto it = map_to_session_.find(map_id); it != map_to_session_.end()) {
+            return sessions_.at(it->second);
+        }
+
+        const SessionId sid = next_session_id_++;
+        auto [it_sess, inserted] =
+            sessions_.emplace(sid, GameSession{sid, map_id});   // map_id копируем как Tagged
+        map_to_session_.emplace(map_id, sid);
+
+        return it_sess->second;
+    }
+
+    const GameSession* Find(SessionId id) const {
+        if (auto it = sessions_.find(id); it != sessions_.end()) return &it->second;
+        return nullptr;
+    }
+
+private:
+    struct MapIdHash {
+        size_t operator()(const Map::Id& id) const noexcept {
+            return util::TaggedHasher<Map::Id>{}(id);
+        }
+    };
+
+    SessionId next_session_id_{0};
+    std::unordered_map<SessionId, GameSession> sessions_;
+    std::unordered_map<Map::Id, SessionId, MapIdHash> map_to_session_;
+};
+
 class Player {
 public:
-    using Id = std::uint32_t;
+    using Id = PlayerId;
 
-    Player(Id id, std::string name, Map::Id map_id)
+    Player(Id id, std::string name, SessionId session_id)
         : id_(id)
         , name_(std::move(name))
-        , map_id_(std::move(map_id)) {
+        , session_id_(session_id) {
     }
 
     Id GetId() const noexcept { return id_; }
     const std::string& GetName() const noexcept { return name_; }
-    const Map::Id& GetMapId() const noexcept { return map_id_; }
+    SessionId GetSessionId() const noexcept { return session_id_; }
 
 private:
     Id id_;
     std::string name_;
-    Map::Id map_id_;
+    SessionId session_id_;
 };
 
 class Players {
 public:
-    Player& Add(Player::Id id, std::string name, Map::Id map_id) {
-        auto [it, inserted] = players_.emplace(id, Player{id, std::move(name), std::move(map_id)});
+    Player& Add(Player::Id id, std::string name, SessionId session_id) {
+        auto [it, inserted] = players_.emplace(id, Player{id, std::move(name), session_id});
         return it->second;
     }
 
     const Player* Find(Player::Id id) const {
-        if (auto it = players_.find(id); it != players_.end()) {
-            return &it->second;
-        }
+        if (auto it = players_.find(id); it != players_.end()) return &it->second;
         return nullptr;
-    }
-
-    std::vector<const Player*> GetByMap(const Map::Id& map_id) const {
-        std::vector<const Player*> result;
-        result.reserve(players_.size());
-        for (const auto& [id, p] : players_) {
-            if (p.GetMapId() == map_id) {
-                result.push_back(&p);
-            }
-        }
-        return result;
     }
 
 private:
