@@ -183,6 +183,9 @@ public:
 
     void AddOffice(Office office);
 
+    void SetDogSpeed(double s) noexcept { dog_speed_ = s; }
+    double GetDogSpeed() const noexcept { return dog_speed_; }
+
 private:
     using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
 
@@ -190,9 +193,9 @@ private:
     std::string name_;
     Roads roads_;
     Buildings buildings_;
-
     OfficeIdToIndex warehouse_id_to_index_;
     Offices offices_;
+    double dog_speed_ = 1.0;
 };
 
 class Game {
@@ -336,6 +339,12 @@ public:
         if (auto it = players_.find(id); it != players_.end()) return &it->second;
         return nullptr;
     }
+
+    Player* FindMutable(Player::Id id) {
+        if (auto it = players_.find(id); it != players_.end()) return &it->second;
+        return nullptr;
+    }
+
 
 private:
     std::unordered_map<Player::Id, Player> players_;

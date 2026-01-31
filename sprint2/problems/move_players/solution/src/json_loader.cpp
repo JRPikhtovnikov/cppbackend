@@ -75,6 +75,11 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
     model::Game game;
     
     const json::array& maps_array = root.at("maps").as_array();
+
+    double default_speed = 1.0;
+    if (const auto* v = root.if_contains("defaultDogSpeed")) {
+        default_speed = json::value_to<double>(*v);
+    }
     
     for (const auto& map_json : maps_array) {
         const json::object& map_obj = map_json.as_object();
@@ -83,6 +88,13 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
         std::string name = json::value_to<std::string>(map_obj.at("name"));
         
         model::Map map(model::Map::Id{id}, name);
+
+        double map_speed = default_speed;
+        if (const auto* v = map_obj.if_contains("dogSpeed")) {
+            map_speed = json::value_to<double>(*v);
+        }
+        map.SetDogSpeed(map_speed);
+
         
         const json::array& roads_array = map_obj.at("roads").as_array();
         for (const auto& road_json : roads_array) {

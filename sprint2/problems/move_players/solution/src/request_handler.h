@@ -22,7 +22,8 @@ constexpr string_view API_PREFIX  = "/api/";
 constexpr string_view JOIN        = "/api/v1/game/join";
 constexpr string_view PLAYERS     = "/api/v1/game/players";
 
-constexpr string_view STATE = "/api/v1/game/state";
+constexpr string_view STATE       = "/api/v1/game/state";
+constexpr string_view ACTION      = "/api/v1/game/player/action";
 
 }  // namespace api
 
@@ -211,6 +212,10 @@ private:
 
         if (target == api::STATE) {
             return HandleState(std::forward<decltype(req)>(req), std::forward<Send>(send));
+        }
+
+        if (target == api::ACTION) {
+            return HandleAction(std::forward<decltype(req)>(req), std::forward<Send>(send));
         }
 
         return send(MakeError(http::status::bad_request, req, "badRequest", "Bad request"));
@@ -416,6 +421,88 @@ private:
         return send(MakeJsonResponse(http::status::ok, req, body));
     }
 
+    template <typename Body, typename Allocator, typename Send>
+    void HandleAction(const http::request<Body, http::basic_fields<Allocator>>& req, Send&& send) {
+        if (req.method() != http::verb::post) {
+            auto resp = MakeError(http::status::method_not_allowed, req, "invalidMethod", "Invalid method");
+            resp.set(http::field::allow, "POST");
+            return send(std::move(resp));
+        }
+
+        const auto ct_it = req.find(http::field::content_type);
+        if (ct_it == req.end() || ct_it->value() != "application/json") {
+            return send(MakeError(http::status::bad_request, req, "invalidArgument", "Invalid content type"));
+        }
+
+        auto response = ExecuteAuthorized(req, [&](const model::Token& token) {
+            const auto pid_opt = tokens_.FindPlayerIdByToken(token);
+            if (!pid_opt) {
+                return MakeError(http::status::unauthorized, req, "unknownToken", "Player token has not been found");
+            }
+
+            model::Player* p = nullptr;
+            p = players_.FindMutable(*pid_opt);
+            if (!p) {
+                return MakeError(http::status::unauthorized, req, "unknownToken", "Player token has not been found");
+            }
+
+            json::value v;
+            try {
+                v = json::parse(req.body());
+            } catch (...) {
+                return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
+            }
+            if (!v.is_object()) {
+                return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
+            }
+            const auto& obj = v.as_object();
+            if (!obj.if_contains("move")) {
+                return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
+            }
+
+            std::string move;
+            try {
+                move = json::value_to<std::string>(obj.at("move"));
+            } catch (...) {
+                return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
+            }
+
+            const model::GameSession* session = sessions_.Find(p->GetSessionId());
+            if (!session) {
+                return MakeError(http::status::unauthorized, req, "unknownToken", "Player token has not been found");
+            }
+
+            const model::Map* map = game_.FindMap(session->GetMapId());
+            if (!map) {
+                return MakeError(http::status::unauthorized, req, "unknownToken", "Player token has not been found");
+            }
+
+            const double s = map->GetDogSpeed();
+
+            if (move == "L") {
+                p->SetDir(model::Direction::West);
+                p->SetSpeed({-s, 0.0});
+            } else if (move == "R") {
+                p->SetDir(model::Direction::East);
+                p->SetSpeed({ s, 0.0});
+            } else if (move == "U") {
+                p->SetDir(model::Direction::North);
+                p->SetSpeed({0.0, -s});
+            } else if (move == "D") {
+                p->SetDir(model::Direction::South);
+                p->SetSpeed({0.0,  s});
+            } else if (move == "") {
+                p->SetSpeed({0.0, 0.0});
+            } else {
+                return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
+            }
+
+            json::object ok;
+            return MakeJsonResponse(http::status::ok, req, ok);
+        });
+
+        return send(std::move(response));
+    }
 
     template <typename Body, typename Allocator, typename Send>
     void SendMapsList(const http::request<Body, http::basic_fields<Allocator>>& req, Send&& send) {
@@ -483,6 +570,31 @@ private:
             std::uniform_real_distribution<double> ydist(static_cast<double>(y0), static_cast<double>(y1));
             return {static_cast<double>(s.x), ydist(gen_)};
         }
+    }
+
+    template <typename Body, typename Allocator>
+    std::optional<model::Token> TryExtractToken(const http::request<Body, http::basic_fields<Allocator>>& req) const {
+        const auto it = req.find(http::field::authorization);
+        if (it == req.end()) return std::nullopt;
+
+        const std::string auth = std::string(it->value());
+        constexpr std::string_view prefix = "Bearer ";
+
+        if (auth.size() <= prefix.size() || auth.compare(0, prefix.size(), prefix) != 0) return std::nullopt;
+
+        const std::string token_str = auth.substr(prefix.size());
+        if (!model::IsHex32(token_str)) return std::nullopt;
+
+        return model::Token{token_str};
+    }
+
+    template <typename Body, typename Allocator, typename Fn>
+    auto ExecuteAuthorized(const http::request<Body, http::basic_fields<Allocator>>& req, Fn&& action) {
+        auto token_opt = TryExtractToken(req);
+        if (!token_opt) {
+            return MakeError(http::status::unauthorized, req, "invalidToken", "Authorization header is required");
+        }
+        return action(*token_opt);
     }
 
 };
