@@ -526,7 +526,7 @@ private:
         }
 
         StringResponse response(http::status::ok, req.version());
-        response.set(http::field::content_type, "application/json");
+        SetApiCommonHeaders(response);
         response.body() = json::serialize(maps_json);
         response.prepare_payload();
 
@@ -552,7 +552,7 @@ private:
         map_json["offices"] = SerializeOffices(*map);
 
         StringResponse response(http::status::ok, req.version());
-        response.set(http::field::content_type, "application/json");
+        SetApiCommonHeaders(response);
         response.body() = json::serialize(map_json);
         response.prepare_payload();
 
