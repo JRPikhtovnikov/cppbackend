@@ -97,6 +97,7 @@ private:
         StringResponse resp(status, req.version());
         SetApiCommonHeaders(resp);
         resp.body() = json::serialize(body);
+        resp.set(http::field::cache_control, "no-cache");
         resp.prepare_payload();
         return resp;
     }
@@ -623,9 +624,10 @@ private:
             if (r.IsHorizontal()) {
                 const double y0 = static_cast<double>(s.y);
                 if (std::abs(y - y0) <= half_w) {
+                    constexpr double half_w = 0.4;
                     const double x0 = static_cast<double>(std::min(s.x, e.x));
                     const double x1 = static_cast<double>(std::max(s.x, e.x));
-                    intervals.push_back({x0, x1});
+                    intervals.push_back({x0 - half_w, x1 + half_w});
                 }
             } else { // vertical
                 const double x0 = static_cast<double>(s.x);
@@ -649,9 +651,10 @@ private:
             if (r.IsVertical()) {
                 const double x0 = static_cast<double>(s.x);
                 if (std::abs(x - x0) <= half_w) {
+                    constexpr double half_w = 0.4;
                     const double y0 = static_cast<double>(std::min(s.y, e.y));
                     const double y1 = static_cast<double>(std::max(s.y, e.y));
-                    intervals.push_back({y0, y1});
+                    intervals.push_back({y0 - half_w, y1 + half_w});  
                 }
             } else { // horizontal
                 const double y0 = static_cast<double>(s.y);
