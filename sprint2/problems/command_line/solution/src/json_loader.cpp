@@ -27,15 +27,14 @@ model::Road ParseRoad(const json::value& road_json) {
         return model::Road(model::Road::HORIZONTAL, 
                           {x0, y0}, 
                           x1);
-    } else {
-        // Вертикальная дорога
-        int x0 = json::value_to<int>(road_json.at("x0"));
-        int y0 = json::value_to<int>(road_json.at("y0"));
-        int y1 = json::value_to<int>(road_json.at("y1"));
-        return model::Road(model::Road::VERTICAL, 
-                          {x0, y0}, 
-                          y1);
     }
+    // Вертикальная дорога
+    int x0 = json::value_to<int>(road_json.at("x0"));
+    int y0 = json::value_to<int>(road_json.at("y0"));
+    int y1 = json::value_to<int>(road_json.at("y1"));
+    return model::Road(model::Road::VERTICAL, 
+                        {x0, y0}, 
+                        y1);
 }
 
 model::Building ParseBuilding(const json::value& building_json) {
@@ -65,7 +64,7 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
 
     try {
         json_value = json::parse(json_str);
-    } catch (const std::exception& e) {
+    } catch (const json::system_error& e) {
         throw std::runtime_error(
             "JSON parse error in file " + json_path.string() + ": " + e.what()
         );

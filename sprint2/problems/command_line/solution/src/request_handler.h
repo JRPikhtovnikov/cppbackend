@@ -274,9 +274,9 @@ private:
         json::value parsed;
         try {
             parsed = json::parse(req.body());
-        } catch (...) {
+        } catch (const json::system_error& e) {
             return send(MakeError(http::status::bad_request, req,
-                                  "invalidArgument", "Join game request parse error"));
+                                  "invalidArgument", "Join game request parse error: " + std::string(e.what())));
         }
 
         if (!parsed.is_object()) {
@@ -291,9 +291,12 @@ private:
         try {
             user_name = json::value_to<std::string>(obj.at("userName"));
             map_id = json::value_to<std::string>(obj.at("mapId"));
-        } catch (...) {
+        } catch (const json::system_error& e) {
             return send(MakeError(http::status::bad_request, req,
-                                  "invalidArgument", "Join game request parse error"));
+                                  "invalidArgument", "Join game request parse error: " + std::string(e.what())));
+        } catch (const std::bad_cast& e) {
+            return send(MakeError(http::status::bad_request, req,
+                                  "invalidArgument", "Join game request parse error: " + std::string(e.what())));
         }
 
         if (user_name.empty()) {
@@ -487,8 +490,9 @@ private:
             json::value v;
             try {
                 v = json::parse(req.body());
-            } catch (...) {
-                return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
+            } catch (const json::system_error& e) {
+                return MakeError(http::status::bad_request, req, "invalidArgument", 
+                                 "Failed to parse action: " + std::string(e.what()));
             }
             if (!v.is_object()) {
                 return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
@@ -501,8 +505,12 @@ private:
             std::string move;
             try {
                 move = json::value_to<std::string>(obj.at("move"));
-            } catch (...) {
-                return MakeError(http::status::bad_request, req, "invalidArgument", "Failed to parse action");
+            } catch (const json::system_error& e) {
+                return MakeError(http::status::bad_request, req, "invalidArgument", 
+                                 "Failed to parse action: " + std::string(e.what()));
+            } catch (const std::bad_cast& e) {
+                return MakeError(http::status::bad_request, req, "invalidArgument", 
+                                 "Failed to parse action: " + std::string(e.what()));
             }
 
             const model::GameSession* session = sessions_.Find(p->GetSessionId());
@@ -612,7 +620,7 @@ private:
         return action(*token_opt);
     }
 
-        struct Interval {
+    struct Interval {
         double a = 0.0;
         double b = 0.0;
     };
@@ -642,56 +650,66 @@ private:
         return nullptr;
     }
 
-    static std::vector<Interval> AllowedXIntervalsAtY(const model::Map& map, double y) {
+    static void ProcessRoadForXIntervals(const model::Road& r, double y, std::vector<Interval>& intervals) {
         constexpr double half_w = 0.4;
-        std::vector<Interval> intervals;
+        const auto s = r.GetStart();
+        const auto e = r.GetEnd();
+        
+        if (r.IsHorizontal()) {
+            const double y0 = static_cast<double>(s.y);
+            if (std::abs(y - y0) <= half_w) {
+                const double x0 = static_cast<double>(std::min(s.x, e.x));
+                const double x1 = static_cast<double>(std::max(s.x, e.x));
+                intervals.push_back({x0 - half_w, x1 + half_w});
+            }
+        } else { // vertical
+            const double x0 = static_cast<double>(s.x);
+            const double y0 = static_cast<double>(std::min(s.y, e.y));
+            const double y1 = static_cast<double>(std::max(s.y, e.y));
+            if (y >= y0 && y <= y1) {
+                intervals.push_back({x0 - half_w, x0 + half_w});
+            }
+        }
+    }
 
-        for (const auto& r : map.GetRoads()) {
-            const auto s = r.GetStart();
-            const auto e = r.GetEnd();
-            if (r.IsHorizontal()) {
-                const double y0 = static_cast<double>(s.y);
-                if (std::abs(y - y0) <= half_w) {
-                    constexpr double half_w = 0.4;
-                    const double x0 = static_cast<double>(std::min(s.x, e.x));
-                    const double x1 = static_cast<double>(std::max(s.x, e.x));
-                    intervals.push_back({x0 - half_w, x1 + half_w});
-                }
-            } else { // vertical
-                const double x0 = static_cast<double>(s.x);
+    static void ProcessRoadForYIntervals(const model::Road& r, double x, std::vector<Interval>& intervals) {
+        constexpr double half_w = 0.4;
+        const auto s = r.GetStart();
+        const auto e = r.GetEnd();
+        
+        if (r.IsVertical()) {
+            const double x0 = static_cast<double>(s.x);
+            if (std::abs(x - x0) <= half_w) {
                 const double y0 = static_cast<double>(std::min(s.y, e.y));
                 const double y1 = static_cast<double>(std::max(s.y, e.y));
-                if (y >= y0 && y <= y1) {
-                    intervals.push_back({x0 - half_w, x0 + half_w});
-                }
+                intervals.push_back({y0 - half_w, y1 + half_w});  
             }
+        } else { // horizontal
+            const double y0 = static_cast<double>(s.y);
+            const double x0 = static_cast<double>(std::min(s.x, e.x));
+            const double x1 = static_cast<double>(std::max(s.x, e.x));
+            if (x >= x0 && x <= x1) {
+                intervals.push_back({y0 - half_w, y0 + half_w});
+            }
+        }
+    }
+
+    static std::vector<Interval> AllowedXIntervalsAtY(const model::Map& map, double y) {
+        std::vector<Interval> intervals;
+        intervals.reserve(map.GetRoads().size());
+
+        for (const auto& r : map.GetRoads()) {
+            ProcessRoadForXIntervals(r, y, intervals);
         }
         return MergeIntervals(std::move(intervals));
     }
 
     static std::vector<Interval> AllowedYIntervalsAtX(const model::Map& map, double x) {
-        constexpr double half_w = 0.4;
         std::vector<Interval> intervals;
+        intervals.reserve(map.GetRoads().size());
 
         for (const auto& r : map.GetRoads()) {
-            const auto s = r.GetStart();
-            const auto e = r.GetEnd();
-            if (r.IsVertical()) {
-                const double x0 = static_cast<double>(s.x);
-                if (std::abs(x - x0) <= half_w) {
-                    constexpr double half_w = 0.4;
-                    const double y0 = static_cast<double>(std::min(s.y, e.y));
-                    const double y1 = static_cast<double>(std::max(s.y, e.y));
-                    intervals.push_back({y0 - half_w, y1 + half_w});  
-                }
-            } else { // horizontal
-                const double y0 = static_cast<double>(s.y);
-                const double x0 = static_cast<double>(std::min(s.x, e.x));
-                const double x1 = static_cast<double>(std::max(s.x, e.x));
-                if (x >= x0 && x <= x1) {
-                    intervals.push_back({y0 - half_w, y0 + half_w});
-                }
-            }
+            ProcessRoadForYIntervals(r, x, intervals);
         }
         return MergeIntervals(std::move(intervals));
     }
@@ -718,12 +736,13 @@ private:
             const auto x1 = std::max(s.x, e.x);
             std::uniform_real_distribution<double> xdist(static_cast<double>(x0), static_cast<double>(x1));
             return {xdist(gen_), static_cast<double>(s.y)};
-        } else {
-            const auto y0 = std::min(s.y, e.y);
-            const auto y1 = std::max(s.y, e.y);
-            std::uniform_real_distribution<double> ydist(static_cast<double>(y0), static_cast<double>(y1));
-            return {static_cast<double>(s.x), ydist(gen_)};
         }
+        
+        // Вертикальная дорога
+        const auto y0 = std::min(s.y, e.y);
+        const auto y1 = std::max(s.y, e.y);
+        std::uniform_real_distribution<double> ydist(static_cast<double>(y0), static_cast<double>(y1));
+        return {static_cast<double>(s.x), ydist(gen_)};
     }
 
     void AdvanceGameTime(std::int64_t time_delta_ms) {
@@ -818,9 +837,9 @@ private:
         json::value parsed;
         try {
             parsed = json::parse(req.body());
-        } catch (...) {
+        } catch (const json::system_error& e) {
             return send(MakeError(http::status::bad_request, req,
-                                  "invalidArgument", "Failed to parse tick request JSON"));
+                                  "invalidArgument", "Failed to parse tick request JSON: " + std::string(e.what())));
         }
 
         if (!parsed.is_object()) {
@@ -842,9 +861,12 @@ private:
                                       "invalidArgument", "Failed to parse tick request JSON"));
             }
             time_delta_ms = td.as_int64();
-        } catch (...) {
+        } catch (const json::system_error& e) {
             return send(MakeError(http::status::bad_request, req,
-                                  "invalidArgument", "Failed to parse tick request JSON"));
+                                  "invalidArgument", "Failed to parse tick request JSON: " + std::string(e.what())));
+        } catch (const std::bad_cast& e) {
+            return send(MakeError(http::status::bad_request, req,
+                                  "invalidArgument", "Failed to parse tick request JSON: " + std::string(e.what())));
         }
 
         if (time_delta_ms < 0) {
