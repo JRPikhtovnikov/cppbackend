@@ -7,8 +7,6 @@
 #include "dotgen.h"
 #include "config.h"
 
-NodeListNode * nodelist = NULL;
-
 void printUsage()
 {
 	fprintf(stderr, "events2dot <eventsfile>\n");
@@ -16,6 +14,7 @@ void printUsage()
 
 int main (int argc, char ** argv)
 {
+	NodeHashTbl * nodehash = new NodeHashTbl (255);
 	GraphList g;
 
 	if ((argc != 2) 
@@ -31,12 +30,11 @@ int main (int argc, char ** argv)
 	Config * config;
 	config = ReadConfig ("pathalizer.conf");
 
-	g = getGraphFromFile(argv[1], nodelist, config);
-
+	g = getGraphFromFile(argv[1], nodehash, config);
 
 	AnnotatedGraph * ag = summarize(g, config);
 
-	GenerateDot (stdout, ag, nodelist, config);
+	GenerateDot (stdout, ag, nodehash, config);
 
 	return 0;
 }

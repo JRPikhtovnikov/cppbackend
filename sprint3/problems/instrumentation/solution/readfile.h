@@ -7,4 +7,4 @@
 
 #define BUFSIZE 255
 
-GraphList getGraphFromFile (char * file, NodeList & nodelist, Config * config);
+GraphList getGraphFromFile (char * file, NodeHashTbl * nodelist, Config * config);

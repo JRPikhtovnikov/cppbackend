@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "config.h"
+#include "binarytree.h"
 
 #define N_PAGES 50
 
@@ -20,11 +21,49 @@ struct NodeListNode
 	NodeListNode * next;
 };
 
+class HashNode
+{
+public:
+        HashNode (char* n_key, Node* n_node, HashNode* n_next)
+        {
+                key = n_key;
+                node = n_node;
+                next = n_next;
+        }
+	void walk (void (*func)(void *, void *), void *);
+
+        char * key;
+        Node * node;
+        HashNode * next;
+};
+
+class NodeHashTbl
+{
+public:
+        NodeHashTbl (int n_size);
+        ~NodeHashTbl ()
+        {
+                free (table);
+        }
+
+        void add (char * key, Node * content);
+        Node * get (char * key);
+        int size;
+        HashNode ** table;
+	void walk (void (*func)(void *, void *), void *);
+private:
+        unsigned int HashString (const char * str);
+        NodeHashTbl();
+        NodeHashTbl(const NodeHashTbl &);
+};
+
 struct Edge
 {
 	Node * from;
 	Node * to;
 	Edge * next;
+
+	int key;
 };
 
 struct AnnotatedEdge 
@@ -44,7 +83,7 @@ struct Graph
 
 struct AnnotatedGraph 
 {
-	AnnotatedEdge * edges;
+	BinaryTree * edgetree;
 };
 
 struct GraphListNode
@@ -60,7 +99,7 @@ typedef struct NodeListNode * NodeList;
  * Takes the name of a node and returns the node with that name, or, if that node doesn't
  * exist, adds a node with that name to the global nodelist.
  */
-Node * getNode (char * name, NodeList &nodelist);
+Node * getNode (char * name, NodeHashTbl * nodehash);
 
 /*
  * Creates a GraphListNode with an empty graph

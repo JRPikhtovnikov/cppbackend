@@ -2,7 +2,7 @@
 
 #undef DEBUG
 
-GraphList getGraphFromFile (char * file, NodeList & nodelist, Config * config)
+GraphList getGraphFromFile (char * file, NodeHashTbl * nodehash, Config * config)
 {
 	FILE * in;
 	GraphListNode * current_graphlistnode = NULL;
@@ -42,7 +42,7 @@ GraphList getGraphFromFile (char * file, NodeList & nodelist, Config * config)
 #ifdef DEBUG
 		fprintf(stderr, "Session %s, node %s\n", session, name);
 #endif
-		current_node = getNode(name, nodelist);
+		current_node = getNode(name, nodehash);
 
 		if (strcmp(session, current_session) != 0)
 		{
