@@ -33,7 +33,7 @@ USER www
 COPY --from=build /app/build/bin/game_server /app/
 COPY ./data /app/data
 COPY ./static /app/static
-COPY ./test /app/test
+COPY ./tests /app/tests
 
 # Запускаем игровой сервер
 ENTRYPOINT ["/app/game_server", "/app/data/config.json", "/app/static/"]
