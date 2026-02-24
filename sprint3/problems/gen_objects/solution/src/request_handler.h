@@ -219,7 +219,6 @@ private:
             return send(std::move(response));
         }
 
-        // Serve static
         HttpSendHandler<Send> send_handler(std::forward<Send>(send));
         auto method_sv = boost::beast::http::to_string(method);
         std::string method_str(method_sv.data(), method_sv.size());
@@ -239,14 +238,18 @@ private:
 
         if (target == api::MAPS || target == api::MAPS_SLASH) {
             if (req.method() != http::verb::get && req.method() != http::verb::head) {
-                return send(MakeError(http::status::method_not_allowed, req, "invalidMethod", "Only GET and HEAD methods are allowed"));
+                auto resp = MakeError(http::status::method_not_allowed, req, "invalidMethod", "Only GET and HEAD methods are allowed");
+                resp.set(http::field::allow, "GET, HEAD");
+                return send(std::move(resp));
             }
             return SendMapsList(req, std::forward<Send>(send));
         }
 
         if (target.starts_with(api::MAPS_PREFIX)) {
             if (req.method() != http::verb::get && req.method() != http::verb::head) {
-                return send(MakeError(http::status::method_not_allowed, req, "invalidMethod", "Only GET and HEAD methods are allowed"));
+                auto resp = MakeError(http::status::method_not_allowed, req, "invalidMethod", "Only GET and HEAD methods are allowed");
+                resp.set(http::field::allow, "GET, HEAD");
+                return send(std::move(resp));
             }
             auto id = target.substr(api::MAPS_SLASH.size());
             if (!id.empty() && id.back() == '/') {
