@@ -238,14 +238,14 @@ private:
         }
 
         if (target == api::MAPS || target == api::MAPS_SLASH) {
-            if (method != http::verb::get && method != http::verb::head) {
+            if (req.method() != http::verb::get && req.method() != http::verb::head) {
                 return send(MakeError(http::status::method_not_allowed, req, "invalidMethod", "Only GET and HEAD methods are allowed"));
             }
             return SendMapsList(req, std::forward<Send>(send));
         }
 
         if (target.starts_with(api::MAPS_PREFIX)) {
-            if (method != http::verb::get && method != http::verb::head) {
+            if (req.method() != http::verb::get && req.method() != http::verb::head) {
                 return send(MakeError(http::status::method_not_allowed, req, "invalidMethod", "Only GET and HEAD methods are allowed"));
             }
             auto id = target.substr(api::MAPS_SLASH.size());
