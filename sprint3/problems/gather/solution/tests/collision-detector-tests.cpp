@@ -62,7 +62,11 @@ public:
     std::string describe() const override {
         std::ostringstream ss;
         ss << "Equals: [";
-        for (const auto& e : expected_) ss << e << " ";
+        for (const auto& e : expected_) {
+            // Manually format each event to avoid requiring operator<<
+            ss << "(" << e.gatherer_id << "," << e.item_id << ","
+               << e.sq_distance << "," << e.time << ") ";
+        }
         ss << "]";
         return ss.str();
     }
