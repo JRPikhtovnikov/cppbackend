@@ -1,18 +1,15 @@
-#define _USE_MATH_DEFINES
-
-#include "../src/collision_detector.h"
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_vector.hpp>
+#include <catch2/catch.hpp>
+#include <vector>
 #include <sstream>
+#include <algorithm>
+#include <cmath>
+#include "../src/collision_detector.h"
 
-using namespace collision_detector;
-using namespace Catch::Matchers;
-
-// Специализация StringMaker для печати GatheringEvent
+// Специализация StringMaker для красивого вывода GatheringEvent
 namespace Catch {
 template <>
-struct StringMaker<GatheringEvent> {
-    static std::string convert(GatheringEvent const& value) {
+struct StringMaker<collision_detector::GatheringEvent> {
+    static std::string convert(collision_detector::GatheringEvent const& value) {
         std::ostringstream tmp;
         tmp << "(" << value.gatherer_id << "," << value.item_id << ","
             << value.sq_distance << "," << value.time << ")";
@@ -21,11 +18,13 @@ struct StringMaker<GatheringEvent> {
 };
 }  // namespace Catch
 
-// Вспомогательный класс для тестов, реализующий ItemGathererProvider
+namespace collision_detector {
+
+// Тестовый провайдер, реализующий интерфейс ItemGathererProvider
 class TestProvider : public ItemGathererProvider {
 public:
-    TestProvider(std::vector<Item> items, std::vector<Gatherer> gatherers)
-        : items_(std::move(items)), gatherers_(std::move(gatherers)) {}
+    TestProvider(std::vector<Gatherer> gatherers, std::vector<Item> items)
+        : gatherers_(std::move(gatherers)), items_(std::move(items)) {}
 
     size_t ItemsCount() const override { return items_.size(); }
     Item GetItem(size_t idx) const override { return items_.at(idx); }
@@ -33,208 +32,231 @@ public:
     Gatherer GetGatherer(size_t idx) const override { return gatherers_.at(idx); }
 
 private:
-    std::vector<Item> items_;
     std::vector<Gatherer> gatherers_;
+    std::vector<Item> items_;
 };
 
 // Вспомогательная функция для сравнения двух событий с учётом погрешности
-bool EventsAlmostEqual(const GatheringEvent& a, const GatheringEvent& b, double eps = 1e-10) {
-    return a.gatherer_id == b.gatherer_id &&
-           a.item_id == b.item_id &&
-           std::abs(a.sq_distance - b.sq_distance) < eps &&
-           std::abs(a.time - b.time) < eps;
+bool EventsEqual(const GatheringEvent& lhs, const GatheringEvent& rhs, double eps = 1e-10) {
+    return lhs.gatherer_id == rhs.gatherer_id &&
+           lhs.item_id == rhs.item_id &&
+           std::abs(lhs.sq_distance - rhs.sq_distance) <= eps &&
+           std::abs(lhs.time - rhs.time) <= eps;
 }
 
-// Матчер для сравнения векторов событий с плавающей точкой
-class GatheringEventMatcher : public Catch::Matchers::MatcherBase<std::vector<GatheringEvent>> {
-public:
-    GatheringEventMatcher(std::vector<GatheringEvent> expected, double eps = 1e-10)
-        : expected_(std::move(expected)), eps_(eps) {}
+}  // namespace collision_detector
 
-    bool match(const std::vector<GatheringEvent>& actual) const override {
-        if (actual.size() != expected_.size()) return false;
-        for (size_t i = 0; i < actual.size(); ++i) {
-            if (!EventsAlmostEqual(actual[i], expected_[i], eps_)) return false;
-        }
-        return true;
-    }
+using namespace collision_detector;
 
-    std::string describe() const override {
-        std::ostringstream ss;
-        ss << "Equals: [";
-        for (const auto& e : expected_) {
-            // Manually format each event to avoid requiring operator<<
-            ss << "(" << e.gatherer_id << "," << e.item_id << ","
-               << e.sq_distance << "," << e.time << ") ";
-        }
-        ss << "]";
-        return ss.str();
-    }
-
-private:
-    std::vector<GatheringEvent> expected_;
-    double eps_;
-};
-
-// Тесты
-TEST_CASE("FindGatherEvents handles empty provider", "[gather]") {
-    TestProvider provider({}, {});
-    auto events = FindGatherEvents(provider);
-    CHECK(events.empty());
-}
-
-TEST_CASE("FindGatherEvents detects a single collection event", "[gather]") {
-    // Собиратель движется из (0,0) в (10,0), ширина 1
-    Gatherer g{{0, 0}, {10, 0}, 1.0};
-    // Предмет в центре пути на расстоянии 5, ширина 1 (радиус 0.5)
-    Item i{{5, 0}, 1.0};
-    TestProvider provider({i}, {g});
+TEST_CASE("FindGatherEvents: single gatherer, single item on path") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
+    Item i{{5, 0}, 0.2};
+    TestProvider provider({g}, {i});
 
     auto events = FindGatherEvents(provider);
+
     REQUIRE(events.size() == 1);
-
-    // Ожидаем событие: gatherer_id=0, item_id=0
-    // Расстояние от предмета до линии = 0, sq_distance = 0
-    // Время: proj_ratio = (5*10)/(10*10) = 0.5 (т.к. u=(5,0), v=(10,0), u_dot_v=50, v_len2=100)
-    GatheringEvent expected{0, 0, 0.0, 0.5};
-    CHECK_THAT(events, GatheringEventMatcher({expected}));
+    CHECK(events[0].gatherer_id == 0);
+    CHECK(events[0].item_id == 0);
+    CHECK(events[0].time == Approx(0.5).margin(1e-10));
+    CHECK(events[0].sq_distance == Approx(0.0).margin(1e-10));
 }
 
-TEST_CASE("FindGatherEvents does not detect when item is too far sideways", "[gather]") {
-    // Собиратель движется горизонтально, предмет сбоку на расстоянии > суммы радиусов
-    Gatherer g{{0, 0}, {10, 0}, 1.0}; // радиус 0.5
-    Item i{{5, 2}, 1.0}; // расстояние по вертикали 2, сумма радиусов 1 -> не пересекается
-    TestProvider provider({i}, {g});
+TEST_CASE("FindGatherEvents: item too far from path") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
+    Item i{{5, 1}, 0.2};               // расстояние 1 > (0.6+0.2)/2 = 0.4
+    TestProvider provider({g}, {i});
 
     auto events = FindGatherEvents(provider);
     CHECK(events.empty());
 }
 
-TEST_CASE("FindGatherEvents does not detect when item is before start", "[gather]") {
-    Gatherer g{{0, 0}, {10, 0}, 1.0};
-    Item i{{-5, 0}, 1.0}; // предмет слева от начала
-    TestProvider provider({i}, {g});
+TEST_CASE("FindGatherEvents: item projection outside segment") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
 
-    auto events = FindGatherEvents(provider);
-    CHECK(events.empty());
+    SECTION("left of start") {
+        Item i{{-1, 0}, 0.2};
+        TestProvider provider({g}, {i});
+        CHECK(FindGatherEvents(provider).empty());
+    }
+
+    SECTION("right of end") {
+        Item i{{11, 0}, 0.2};
+        TestProvider provider({g}, {i});
+        CHECK(FindGatherEvents(provider).empty());
+    }
 }
 
-TEST_CASE("FindGatherEvents does not detect when item is after end", "[gather]") {
-    Gatherer g{{0, 0}, {10, 0}, 1.0};
-    Item i{{15, 0}, 1.0}; // предмет справа от конца
-    TestProvider provider({i}, {g});
+TEST_CASE("FindGatherEvents: item at start and end positions") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
 
-    auto events = FindGatherEvents(provider);
-    CHECK(events.empty());
+    SECTION("at start") {
+        Item i{{0, 0}, 0.2};
+        TestProvider provider({g}, {i});
+        auto events = FindGatherEvents(provider);
+        REQUIRE(events.size() == 1);
+        CHECK(events[0].time == Approx(0.0).margin(1e-10));
+    }
+
+    SECTION("at end") {
+        Item i{{10, 0}, 0.2};
+        TestProvider provider({g}, {i});
+        auto events = FindGatherEvents(provider);
+        REQUIRE(events.size() == 1);
+        CHECK(events[0].time == Approx(1.0).margin(1e-10));
+    }
 }
 
-TEST_CASE("FindGatherEvents handles multiple items and gatherers", "[gather]") {
-    // Два собирателя и три предмета
-    Gatherer g1{{0, 0}, {10, 0}, 1.0};
-    Gatherer g2{{0, 10}, {0, 0}, 1.0}; // движется вниз
-    Item i1{{5, 0}, 1.0};   // пересекается с g1 в момент 0.5
-    Item i2{{0, 5}, 1.0};   // пересекается с g2 в момент 0.5 (g2 движется сверху вниз)
-    Item i3{{5, 5}, 1.0};   // не пересекается ни с кем
+TEST_CASE("FindGatherEvents: multiple items on path") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
+    std::vector<Item> items = {
+        {{2, 0}, 0.2},
+        {{5, 0}, 0.2},
+        {{8, 0}, 0.2}
+    };
+    TestProvider provider({g}, items);
 
-    TestProvider provider({i1, i2, i3}, {g1, g2});
-    auto events = FindGatherEvents(provider);
-
-    REQUIRE(events.size() == 2);
-    // Ожидаем два события: (gatherer=0, item=0, time=0.5) и (gatherer=1, item=1, time=0.5)
-    // Порядок может быть любым, так как время одинаково.
-    std::vector<GatheringEvent> expected1{{0, 0, 0.0, 0.5}, {1, 1, 0.0, 0.5}};
-    std::vector<GatheringEvent> expected2{{1, 1, 0.0, 0.5}, {0, 0, 0.0, 0.5}};
-
-    bool matchOrder1 = std::is_permutation(events.begin(), events.end(),
-                                           expected1.begin(), expected1.end(),
-                                           [](const auto& a, const auto& b) {
-                                               return a.gatherer_id == b.gatherer_id &&
-                                                      a.item_id == b.item_id &&
-                                                      std::abs(a.sq_distance - b.sq_distance) < 1e-10 &&
-                                                      std::abs(a.time - b.time) < 1e-10;
-                                           });
-    bool matchOrder2 = std::is_permutation(events.begin(), events.end(),
-                                           expected2.begin(), expected2.end(),
-                                           [](const auto& a, const auto& b) {
-                                               return a.gatherer_id == b.gatherer_id &&
-                                                      a.item_id == b.item_id &&
-                                                      std::abs(a.sq_distance - b.sq_distance) < 1e-10 &&
-                                                      std::abs(a.time - b.time) < 1e-10;
-                                           });
-    CHECK((matchOrder1 || matchOrder2));
-}
-
-TEST_CASE("FindGatherEvents orders events by time", "[gather]") {
-    // Один собиратель, несколько предметов на разных расстояниях
-    Gatherer g{{0, 0}, {10, 0}, 1.0};
-    Item i1{{2, 0}, 1.0}; // time = 0.2
-    Item i2{{8, 0}, 1.0}; // time = 0.8
-    Item i3{{5, 0}, 1.0}; // time = 0.5
-
-    TestProvider provider({i1, i2, i3}, {g});
     auto events = FindGatherEvents(provider);
 
     REQUIRE(events.size() == 3);
-    // Проверяем, что времена упорядочены по возрастанию
-    CHECK(events[0].time == 0.2);
-    CHECK(events[1].time == 0.5);
-    CHECK(events[2].time == 0.8);
+    CHECK(events[0].time == Approx(0.2).margin(1e-10));
+    CHECK(events[1].time == Approx(0.5).margin(1e-10));
+    CHECK(events[2].time == Approx(0.8).margin(1e-10));
+    CHECK(events[0].item_id == 0);
+    CHECK(events[1].item_id == 1);
+    CHECK(events[2].item_id == 2);
 }
 
-TEST_CASE("FindGatherEvents respects zero movement (no events)", "[gather]") {
-    Gatherer g{{0, 0}, {0, 0}, 1.0}; // собиратель не двигается
-    Item i{{5, 0}, 1.0};
-    TestProvider provider({i}, {g});
+TEST_CASE("FindGatherEvents: multiple gatherers and items") {
+    Gatherer g1{{0, 0}, {10, 0}, 0.6};
+    Gatherer g2{{0, 1}, {10, 1}, 0.6};
+    Item i1{{5, 0}, 0.2};
+    Item i2{{5, 1}, 0.2};
+    Item i3{{5, 0.5}, 0.2};   // вне зоны сбора (расстояние 0.5 > 0.4)
+
+    TestProvider provider({g1, g2}, {i1, i2, i3});
+    auto events = FindGatherEvents(provider);
+
+    REQUIRE(events.size() == 2);
+
+    // Ожидаемые события (порядок может быть любым из-за одинакового времени)
+    std::vector<GatheringEvent> expected = {
+        {0, 0, 0.0, 0.5},
+        {1, 1, 0.0, 0.5}
+    };
+
+    // Сортируем для сравнения
+    auto cmp = [](const GatheringEvent& a, const GatheringEvent& b) {
+        if (a.time != b.time) return a.time < b.time;
+        if (a.gatherer_id != b.gatherer_id) return a.gatherer_id < b.gatherer_id;
+        return a.item_id < b.item_id;
+    };
+    std::sort(events.begin(), events.end(), cmp);
+    std::sort(expected.begin(), expected.end(), cmp);
+
+    for (size_t i = 0; i < events.size(); ++i) {
+        CHECK(events[i].gatherer_id == expected[i].gatherer_id);
+        CHECK(events[i].item_id == expected[i].item_id);
+        CHECK(events[i].time == Approx(expected[i].time).margin(1e-10));
+        CHECK(events[i].sq_distance == Approx(expected[i].sq_distance).margin(1e-10));
+    }
+}
+
+TEST_CASE("FindGatherEvents: zero movement") {
+    Gatherer g{{0, 0}, {0, 0}, 0.6};
+    Item i{{0, 0}, 0.2};
+    TestProvider provider({g}, {i});
 
     auto events = FindGatherEvents(provider);
     CHECK(events.empty());
 }
 
-TEST_CASE("FindGatherEvents boundary cases: item exactly at edge of collection radius", "[gather]") {
-    // Собиратель движется горизонтально, предмет на расстоянии, равном сумме радиусов (граница)
-    Gatherer g{{0, 0}, {10, 0}, 1.0}; // радиус 0.5
-    // Радиус предмета тоже 0.5, сумма = 1.0
-    // Предмет на (5, 1) – расстояние до линии = 1.0, должно быть пересечение (<=1)
-    Item i1{{5, 1}, 1.0};
-    TestProvider provider1({i1}, {g});
-    auto events1 = FindGatherEvents(provider1);
-    CHECK(events1.size() == 1);
+TEST_CASE("FindGatherEvents: item at collection radius boundary") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
+    double collect_radius = (g.width + 0.2) / 2.0; // 0.4
+    Item i{{5, collect_radius}, 0.2};             // точно на границе
 
-    // Предмет на (5, 1.0001) – расстояние чуть больше 1, не должно пересекаться
-    Item i2{{5, 1.0001}, 1.0};
-    TestProvider provider2({i2}, {g});
-    auto events2 = FindGatherEvents(provider2);
-    CHECK(events2.empty());
-}
-
-TEST_CASE("FindGatherEvents handles item exactly at start or end point", "[gather]") {
-    Gatherer g{{0, 0}, {10, 0}, 1.0};
-    // Предмет в начальной точке (должен быть пойман, так как proj_ratio=0, расстояние 0)
-    Item i_start{{0, 0}, 1.0};
-    TestProvider provider_start({i_start}, {g});
-    auto events_start = FindGatherEvents(provider_start);
-    REQUIRE(events_start.size() == 1);
-    CHECK(events_start[0].time == 0.0);
-
-    // Предмет в конечной точке (proj_ratio=1)
-    Item i_end{{10, 0}, 1.0};
-    TestProvider provider_end({i_end}, {g});
-    auto events_end = FindGatherEvents(provider_end);
-    REQUIRE(events_end.size() == 1);
-    CHECK(events_end[0].time == 1.0);
-}
-
-TEST_CASE("FindGatherEvents calculates sq_distance correctly", "[gather]") {
-    // Собиратель движется по диагонали, предмет смещён
-    Gatherer g{{0, 0}, {10, 10}, 1.0}; // вектор (10,10)
-    Item i{{5, 6}, 1.0}; // расстояние до прямой?
-    // Вектор u = (5,6), v = (10,10)
-    // u_dot_v = 5*10 + 6*10 = 110, v_len2 = 200, proj_ratio = 110/200 = 0.55
-    // sq_distance = u_len2 - (u_dot_v)^2/v_len2 = (25+36)=61 - 110*110/200 =61 - 12100/200 =61 - 60.5 = 0.5
-    // Ожидаем sq_distance = 0.5
-    TestProvider provider({i}, {g});
+    TestProvider provider({g}, {i});
     auto events = FindGatherEvents(provider);
+
     REQUIRE(events.size() == 1);
-    CHECK(events[0].sq_distance == 0.5);
-    CHECK(events[0].time == 0.55);
+    CHECK(events[0].time == Approx(0.5).margin(1e-10));
+    CHECK(events[0].sq_distance == Approx(collect_radius * collect_radius).margin(1e-10));
+}
+
+TEST_CASE("FindGatherEvents: no false positives near boundary") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
+    double collect_radius = (g.width + 0.2) / 2.0; // 0.4
+    const double eps = 1e-5;
+
+    SECTION("slightly beyond radius") {
+        Item i{{5, collect_radius + eps}, 0.2};
+        TestProvider provider({g}, {i});
+        CHECK(FindGatherEvents(provider).empty());
+    }
+
+    SECTION("projection slightly before start") {
+        Item i{{-eps, 0}, 0.2};
+        TestProvider provider({g}, {i});
+        CHECK(FindGatherEvents(provider).empty());
+    }
+
+    SECTION("projection slightly after end") {
+        Item i{{10 + eps, 0}, 0.2};
+        TestProvider provider({g}, {i});
+        CHECK(FindGatherEvents(provider).empty());
+    }
+}
+
+TEST_CASE("FindGatherEvents: item with large width") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};   // радиус 0.3
+    Item i{{5, 1.0}, 1.6};              // радиус 0.8, сумма радиусов 1.1 > 1.0
+
+    TestProvider provider({g}, {i});
+    auto events = FindGatherEvents(provider);
+
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].time == Approx(0.5).margin(1e-10));
+    CHECK(events[0].sq_distance == Approx(1.0 * 1.0).margin(1e-10));
+}
+
+TEST_CASE("FindGatherEvents: diagonal movement") {
+    Gatherer g{{0, 0}, {10, 10}, 0.6};
+
+    SECTION("item exactly on line") {
+        Item i{{5, 5}, 0.2};
+        TestProvider provider({g}, {i});
+        auto events = FindGatherEvents(provider);
+        REQUIRE(events.size() == 1);
+        CHECK(events[0].time == Approx(0.5).margin(1e-10));
+        CHECK(events[0].sq_distance == Approx(0.0).margin(1e-10));
+    }
+
+    SECTION("item at maximum allowed distance") {
+        // перпендикулярное смещение на 0.4 (радиус сбора)
+        double shift = 0.4 / std::sqrt(2.0); // 0.4/√2 ≈ 0.2828427
+        Item i{{5 + shift, 5 - shift}, 0.2};
+        TestProvider provider({g}, {i});
+        auto events = FindGatherEvents(provider);
+        REQUIRE(events.size() == 1);
+        CHECK(events[0].time == Approx(0.5).margin(1e-6));
+        CHECK(events[0].sq_distance == Approx(0.4 * 0.4).margin(1e-6));
+    }
+}
+
+TEST_CASE("FindGatherEvents: events in chronological order") {
+    Gatherer g{{0, 0}, {10, 0}, 0.6};
+    std::vector<Item> items = {
+        {{9, 0}, 0.2},   // время 0.9
+        {{1, 0}, 0.2},   // время 0.1
+        {{5, 0}, 0.2}    // время 0.5
+    };
+    TestProvider provider({g}, items);
+
+    auto events = FindGatherEvents(provider);
+
+    REQUIRE(events.size() == 3);
+    CHECK(events[0].time == Approx(0.1).margin(1e-10));
+    CHECK(events[1].time == Approx(0.5).margin(1e-10));
+    CHECK(events[2].time == Approx(0.9).margin(1e-10));
 }
