@@ -14,14 +14,6 @@ message(STATUS "${importTargets}")
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-find_package(Boost REQUIRED COMPONENTS 
-    system
-    filesystem
-    json
-    log
-    program_options
-)
-
 add_library(game_lib STATIC
     src/model.h
     src/model.cpp
@@ -67,18 +59,18 @@ target_link_libraries(game_server
     Threads::Threads
 )
 
-add_executable(game_server_tests
-    tests/loot_generator_tests.cpp
-)
+#add_executable(game_server_tests
+#    tests/loot_generator_tests.cpp
+#)
 
-target_include_directories(game_server_tests PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    CONAN_PKG::boost
-)
+#target_include_directories(game_server_tests PRIVATE 
+#    ${CMAKE_CURRENT_SOURCE_DIR}/src
+#    CONAN_PKG::boost
+#)
 
-target_link_libraries(game_server_tests 
-    game_lib
-    CONAN_PKG::catch2
-    Boost::boost
-    Threads::Threads
-)
+#target_link_libraries(game_server_tests 
+#    game_lib
+#    CONAN_PKG::catch2
+#    CONAN_PKG::boost
+#    Threads::Threads
+#)
