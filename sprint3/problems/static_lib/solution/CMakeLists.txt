@@ -71,6 +71,6 @@ target_include_directories(game_server_tests PRIVATE
 target_link_libraries(game_server_tests 
     game_lib
     CONAN_PKG::catch2
-    CONAN_PKG::boost
+    CONAN_PKG::boost::boost
     Threads::Threads
 )
