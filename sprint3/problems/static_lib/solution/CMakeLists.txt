@@ -14,6 +14,14 @@ message(STATUS "${importTargets}")
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+find_package(Boost REQUIRED COMPONENTS 
+    system
+    filesystem
+    json
+    log
+    program_options
+)
+
 add_library(game_lib STATIC
     src/model.h
     src/model.cpp
@@ -71,6 +79,6 @@ target_include_directories(game_server_tests PRIVATE
 target_link_libraries(game_server_tests 
     game_lib
     CONAN_PKG::catch2
-    CONAN_PKG::boost::boost
+    Boost::boost
     Threads::Threads
 )
