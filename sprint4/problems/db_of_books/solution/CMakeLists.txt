@@ -9,9 +9,10 @@ conan_basic_setup(TARGETS)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+add_executable(book_manager main.cpp)
+
 target_include_directories(book_manager PRIVATE
     CONAN_PKG::boost
 )
 
-add_executable(book_manager main.cpp)
 target_link_libraries(book_manager CONAN_PKG::libpqxx CONAN_PKG::boost)
