@@ -3,6 +3,7 @@
 #include <pqxx/transaction>
 
 #include "../domain/author.h"
+#include "../domain/book.h"
 
 namespace postgres {
 

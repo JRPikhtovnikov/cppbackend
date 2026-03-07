@@ -1,6 +1,7 @@
 #include "postgres.h"
 
 #include <pqxx/zview.hxx>
+#include <pqxx/result> 
 
 namespace postgres {
 
@@ -27,7 +28,8 @@ std::vector<domain::Author> AuthorRepositoryImpl::GetAllAuthors() const {
     auto rows = r.exec("SELECT id, name FROM authors ORDER BY name"_zv);
     std::vector<domain::Author> authors;
     authors.reserve(rows.size());
-    for (const auto& row : rows) {
+    for (auto it = rows.begin(); it != rows.end(); ++it) {
+        const auto& row = *it;
         auto id = domain::AuthorId::FromString(row[0].c_str());
         authors.emplace_back(std::move(id), row[1].c_str());
     }
