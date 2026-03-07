@@ -22,7 +22,9 @@ private:
 
 class BookRepositoryImpl : public domain::BookRepository {
 public:
-    explicit BookRepositoryImpl(pqxx::connection& connection);
+    explicit BookRepositoryImpl(pqxx::connection& connection)
+                : connection_{connection} {
+    }
     void Save(const domain::Book& book) override;
     std::vector<domain::Book> GetAllBooks() const override;
     std::vector<domain::Book> GetBooksByAuthor(const domain::AuthorId& author_id) const override;
