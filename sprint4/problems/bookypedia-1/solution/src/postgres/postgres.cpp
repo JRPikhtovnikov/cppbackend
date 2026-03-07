@@ -8,6 +8,14 @@ namespace postgres {
 using namespace std::literals;
 using pqxx::operator"" _zv;
 
+postgres::AuthorRepositoryImpl::AuthorRepositoryImpl(pqxx::connection& connection)
+    : connection_{connection} {
+}
+
+postgres::BookRepositoryImpl::BookRepositoryImpl(pqxx::connection& connection)
+    : connection_{connection} {
+}
+
 void AuthorRepositoryImpl::Save(const domain::Author& author) {
     // Пока каждое обращение к репозиторию выполняется внутри отдельной транзакции
     // В будущих уроках вы узнаете про паттерн Unit of Work, при помощи которого сможете несколько
