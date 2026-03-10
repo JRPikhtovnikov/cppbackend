@@ -101,6 +101,12 @@ std::vector<detail::BookInfo> View::GetBooks() const {
                               book.GetPublicationYear()});
         }
     }
+    std::sort(result.begin(), result.end(),
+        [](const detail::BookInfo& a, const detail::BookInfo& b) {
+            if (a.title != b.title) return a.title < b.title;
+            if (a.author_name != b.author_name) return a.author_name < b.author_name;
+            return a.publication_year < b.publication_year;
+        });
     return result;
 }
 
@@ -309,7 +315,6 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         }
 
         if (!book) {
-            output_ << "Failed to delete book" << std::endl;
             return true;
         }
 
@@ -334,7 +339,6 @@ bool View::EditBook(std::istream& cmd_input) const {
         }
 
         if (!book) {
-            output_ << "Book not found" << std::endl;
             return true;
         }
 
@@ -400,7 +404,7 @@ bool View::ShowBook(std::istream& cmd_input) const {
             book = SelectBookByTitle(title);
         }
 
-        if (!book) return true;  // ничего не выводим
+        if (!book) return true; 
 
         auto book_id = domain::BookId::FromString(book->id);
         auto current_book = use_cases_.GetBookById(book_id);
