@@ -166,7 +166,11 @@ std::vector<std::string> View::NormalizeTags(const std::string& input) const {
         boost::algorithm::trim(t);
         // заменяем множественные пробелы на один
         t = std::regex_replace(t, std::regex("\\s+"), " ");
-        if (!t.empty()) result.push_back(t);
+        if (!t.empty()) {
+            // обрезаем до 30 символов
+            if (t.size() > 30) t = t.substr(0, 30);
+            result.push_back(t);
+        }
     }
     // удаляем дубликаты
     std::sort(result.begin(), result.end());
@@ -393,7 +397,8 @@ bool View::EditBook(std::istream& cmd_input) const {
         boost::algorithm::trim(tags_line);
         std::vector<std::string> new_tags;
         if (tags_line.empty()) {
-            new_tags = current_tags;  // сохраняем текущие
+            // Пустая строка — удалить все теги
+            new_tags = {};
         } else {
             new_tags = NormalizeTags(tags_line);
         }
