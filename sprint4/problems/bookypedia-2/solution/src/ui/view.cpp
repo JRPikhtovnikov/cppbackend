@@ -114,10 +114,15 @@ std::vector<detail::BookInfo> View::GetAuthorBooks(const domain::AuthorId& autho
     std::vector<detail::BookInfo> result;
     auto author_opt = use_cases_.GetAuthorById(author_id);
     if (!author_opt) return result;
-    for (const auto& book : use_cases_.GetBooksByTitle("")) { // TODO: исправить
-        // На самом деле нужно получать книги по автору
-        // Для этого добавим метод в use_cases: GetBooksByAuthorId
-        // Пока заглушка
+    
+    auto books = use_cases_.GetBooksByAuthor(author_id);
+    for (const auto& book : books) {
+        result.push_back({
+            book.GetId().ToString(),
+            book.GetTitle(),
+            author_opt->GetName(),
+            book.GetPublicationYear()
+        });
     }
     return result;
 }
@@ -318,7 +323,7 @@ bool View::DeleteBook(std::istream& cmd_input) const {
 
         if (!book) {
             if (with_title) {
-                output_ << "Book not found" << std::endl;
+                output_ << "Failed to delete book" << std::endl;
             }
             return true;
         }
@@ -414,7 +419,6 @@ bool View::ShowBook(std::istream& cmd_input) const {
         }
 
         if (!book) {
-            output_ << "Book not found" << std::endl;
             return true; 
         }
 

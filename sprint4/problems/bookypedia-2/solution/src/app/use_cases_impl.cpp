@@ -39,10 +39,19 @@ void UseCasesImpl::AddBook(const domain::AuthorId& author_id,
                            const std::vector<std::string>& tags) {
     pqxx::work w(connection_);
     domain::BookId book_id = domain::BookId::New();
-    books_.Save(domain::Book(book_id, author_id, title, year));
-    for (const auto& t : tags) {
-        tags_.Save(domain::Tag(book_id, t));
+    
+    // Вставка книги
+    w.exec_params(
+        "INSERT INTO books (id, author_id, title, publication_year) VALUES ($1, $2, $3, $4)",
+        book_id.ToString(), author_id.ToString(), title, year);
+    
+    // Вставка тегов
+    for (const auto& tag : tags) {
+        w.exec_params(
+            "INSERT INTO book_tags (book_id, tag) VALUES ($1, $2)",
+            book_id.ToString(), tag);
     }
+    
     w.commit();
 }
 
@@ -57,14 +66,27 @@ void UseCasesImpl::EditBook(const domain::BookId& book_id,
                             const std::string& new_title,
                             int new_year,
                             const std::vector<std::string>& new_tags) {
-    pqxx::work w(connection_);
+    // Получаем книгу для проверки существования (в отдельной транзакции чтения)
     auto book_opt = books_.GetById(book_id);
     if (!book_opt) return;
-    books_.Save(domain::Book(book_id, book_opt->GetAuthorId(), new_title, new_year));
-    tags_.DeleteByBook(book_id);
-    for (const auto& t : new_tags) {
-        tags_.Save(domain::Tag(book_id, t));
+
+    pqxx::work w(connection_);
+    
+    // Обновление книги
+    w.exec_params(
+        "UPDATE books SET title = $1, publication_year = $2 WHERE id = $3",
+        new_title, new_year, book_id.ToString());
+    
+    // Удаление старых тегов
+    w.exec_params("DELETE FROM book_tags WHERE book_id = $1", book_id.ToString());
+    
+    // Вставка новых тегов
+    for (const auto& tag : new_tags) {
+        w.exec_params(
+            "INSERT INTO book_tags (book_id, tag) VALUES ($1, $2)",
+            book_id.ToString(), tag);
     }
+    
     w.commit();
 }
 
