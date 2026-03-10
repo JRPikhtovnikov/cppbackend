@@ -44,6 +44,7 @@ void UseCasesImpl::AddBook(const domain::AuthorId& author_id,
 
 void UseCasesImpl::DeleteBook(const domain::BookId& book_id) {
     books_.Delete(book_id);
+}
 
 void UseCasesImpl::EditBook(const domain::BookId& book_id,
                             const std::string& new_title,
