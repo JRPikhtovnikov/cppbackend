@@ -1,8 +1,11 @@
 #pragma once
 #include <iosfwd>
-#include <optional>
+#include <optional>         
 #include <string>
 #include <vector>
+
+#include "../domain/author.h" 
+#include "../domain/book.h"  
 
 namespace menu {
 class Menu;

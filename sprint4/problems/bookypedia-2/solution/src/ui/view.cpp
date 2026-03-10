@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include "../app/use_cases.h"
 #include "../menu/menu.h"
+#include "../domain/author.h" 
+#include "../domain/book.h"  
 
 using namespace std::literals;
 namespace ph = std::placeholders;
@@ -433,13 +435,17 @@ bool View::ShowAuthorBooks() const {
     try {
         auto author_id_opt = SelectAuthorId();
         if (!author_id_opt) return true;
-        // Получаем книги автора
-        auto books = use_cases_.GetBooksByAuthor(*author_id_opt); // добавим метод
-        std::vector<detail::BookInfo> book_infos;
         auto author = use_cases_.GetAuthorById(*author_id_opt);
         if (!author) return true;
+        auto books = use_cases_.GetBooksByAuthor(*author_id_opt);
+        std::vector<detail::BookInfo> book_infos;
         for (const auto& b : books) {
-            book_infos.push_back({b.GetId().ToString(), b.GetTitle(), author->GetName(), b.GetPublicationYear()});
+            book_infos.emplace_back(
+                b.GetId().ToString(),
+                b.GetTitle(),
+                author->GetName(),
+                b.GetPublicationYear()
+            );
         }
         PrintVector(output_, book_infos);
     } catch (const std::exception&) {
