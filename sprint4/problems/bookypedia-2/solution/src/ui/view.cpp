@@ -338,7 +338,6 @@ bool View::EditBook(std::istream& cmd_input) const {
             return true;
         }
 
-        // Текущие данные
         auto book_id = domain::BookId::FromString(book->id);
         auto current_book = use_cases_.GetBookById(book_id);
         if (!current_book) {
@@ -346,14 +345,14 @@ bool View::EditBook(std::istream& cmd_input) const {
             return true;
         }
 
-        // Ввод нового названия
+        // Название
         output_ << "Enter new title or empty line to use the current one (" << current_book->GetTitle() << "):" << std::endl;
         std::string new_title;
         std::getline(input_, new_title);
         boost::algorithm::trim(new_title);
         if (new_title.empty()) new_title = current_book->GetTitle();
 
-        // Ввод нового года
+        // Год
         output_ << "Enter publication year or empty line to use the current one (" << current_book->GetPublicationYear() << "):" << std::endl;
         std::string year_str;
         std::getline(input_, year_str);
@@ -363,18 +362,23 @@ bool View::EditBook(std::istream& cmd_input) const {
             new_year = std::stoi(year_str);
         }
 
-        // Текущие теги
+        // Теги
         auto current_tags = use_cases_.GetTagsByBook(book_id);
         std::string tags_display;
         for (size_t i = 0; i < current_tags.size(); ++i) {
             if (i > 0) tags_display += ", ";
             tags_display += current_tags[i];
         }
-
         output_ << "Enter tags (current tags: " << tags_display << "):" << std::endl;
         std::string tags_line;
         std::getline(input_, tags_line);
-        auto new_tags = NormalizeTags(tags_line);
+        boost::algorithm::trim(tags_line);
+        std::vector<std::string> new_tags;
+        if (tags_line.empty()) {
+            new_tags = current_tags;  // сохраняем текущие
+        } else {
+            new_tags = NormalizeTags(tags_line);
+        }
 
         use_cases_.EditBook(book_id, new_title, new_year, new_tags);
     } catch (const std::exception&) {

@@ -8,19 +8,7 @@ void UseCasesImpl::AddAuthor(const std::string& name) {
 }
 
 void UseCasesImpl::DeleteAuthor(const domain::AuthorId& author_id) {
-    pqxx::work w(connection_);
-    try {
-        auto books = books_.GetBooksByAuthor(author_id);
-        for (const auto& book : books) {
-            tags_.DeleteByBook(book.GetId());
-            books_.Delete(book.GetId());
-        }
-        authors_.Delete(author_id);
-        w.commit();
-    } catch (...) {
-        w.abort();
-        throw;
-    }
+    authors_.Delete(author_id);
 }
 
 void UseCasesImpl::EditAuthor(const domain::AuthorId& author_id, const std::string& new_name) {
@@ -55,11 +43,7 @@ void UseCasesImpl::AddBook(const domain::AuthorId& author_id,
 }
 
 void UseCasesImpl::DeleteBook(const domain::BookId& book_id) {
-    pqxx::work w(connection_);
-    tags_.DeleteByBook(book_id);
     books_.Delete(book_id);
-    w.commit();
-}
 
 void UseCasesImpl::EditBook(const domain::BookId& book_id,
                             const std::string& new_title,
