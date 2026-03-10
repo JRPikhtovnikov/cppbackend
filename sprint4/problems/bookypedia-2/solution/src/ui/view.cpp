@@ -193,7 +193,6 @@ bool View::AddBook(std::istream& cmd_input) const {
         boost::algorithm::trim(title);
         if (title.empty()) throw std::runtime_error("Empty title");
 
-        // Ввод автора
         output_ << "Enter author name or empty line to select from list:" << std::endl;
         std::string author_input;
         std::getline(input_, author_input);
@@ -204,7 +203,7 @@ bool View::AddBook(std::istream& cmd_input) const {
             // Выбор из списка
             auto author_opt = SelectAuthorId();
             if (!author_opt) {
-                output_ << "Failed to add book" << std::endl;
+                // Отмена – ничего не выводим
                 return true;
             }
             author_id = *author_opt;
@@ -230,7 +229,6 @@ bool View::AddBook(std::istream& cmd_input) const {
             }
         }
 
-        // Ввод тегов
         output_ << "Enter tags (comma separated):" << std::endl;
         std::string tags_line;
         std::getline(input_, tags_line);
@@ -243,28 +241,37 @@ bool View::AddBook(std::istream& cmd_input) const {
     return true;
 }
 
-bool View::DeleteAuthor(std::istream& cmd_input) const {
+bool View::EditAuthor(std::istream& cmd_input) const {
     try {
         std::string name;
         std::getline(cmd_input, name);
         boost::algorithm::trim(name);
 
+        bool with_name = !name.empty();
         std::optional<domain::AuthorId> author_id;
-        if (name.empty()) {
-            author_id = SelectAuthorId();
-        } else {
+        if (with_name) {
             auto author_opt = use_cases_.GetAuthorByName(name);
             if (author_opt) author_id = author_opt->GetId();
+        } else {
+            author_id = SelectAuthorId();
         }
 
         if (!author_id) {
-            output_ << "Failed to delete author" << std::endl;
+            if (with_name) {
+                output_ << "Failed to edit author" << std::endl;
+            }
             return true;
         }
 
-        use_cases_.DeleteAuthor(*author_id);
+        output_ << "Enter new name:" << std::endl;
+        std::string new_name;
+        std::getline(input_, new_name);
+        boost::algorithm::trim(new_name);
+        if (new_name.empty()) throw std::runtime_error("Empty name");
+
+        use_cases_.EditAuthor(*author_id, new_name);
     } catch (const std::exception&) {
-        output_ << "Failed to delete author" << std::endl;
+        output_ << "Failed to edit author" << std::endl;
     }
     return true;
 }
@@ -275,6 +282,7 @@ bool View::EditAuthor(std::istream& cmd_input) const {
         std::getline(cmd_input, name);
         boost::algorithm::trim(name);
 
+        bool with_name = !name.empty();
         std::optional<domain::AuthorId> author_id;
         if (name.empty()) {
             author_id = SelectAuthorId();
@@ -284,7 +292,9 @@ bool View::EditAuthor(std::istream& cmd_input) const {
         }
 
         if (!author_id) {
-            output_ << "Failed to edit author" << std::endl;
+            if (with_name) {
+                output_ << "Failed to edit author" << std::endl;
+            }
             return true;
         }
 
@@ -307,14 +317,18 @@ bool View::DeleteBook(std::istream& cmd_input) const {
         std::getline(cmd_input, title);
         boost::algorithm::trim(title);
 
+        bool with_title = !title.empty();
         std::optional<detail::BookInfo> book;
-        if (title.empty()) {
-            book = SelectBookFromList();
-        } else {
+        if (with_title) {
             book = SelectBookByTitle(title);
+        } else {
+            book = SelectBookFromList();
         }
 
         if (!book) {
+            if (with_title) {
+                output_ << "Book not found" << std::endl;
+            }
             return true;
         }
 
@@ -331,6 +345,7 @@ bool View::EditBook(std::istream& cmd_input) const {
         std::getline(cmd_input, title);
         boost::algorithm::trim(title);
 
+        bool with_title = !title.empty();
         std::optional<detail::BookInfo> book;
         if (title.empty()) {
             book = SelectBookFromList();
@@ -339,6 +354,9 @@ bool View::EditBook(std::istream& cmd_input) const {
         }
 
         if (!book) {
+            if (with_title) {
+                output_ << "Book not found" << std::endl;
+            }
             return true;
         }
 
@@ -404,7 +422,10 @@ bool View::ShowBook(std::istream& cmd_input) const {
             book = SelectBookByTitle(title);
         }
 
-        if (!book) return true; 
+        if (!book) {
+            output_ << "Book not found" << std::endl;
+            return true; 
+        }
 
         auto book_id = domain::BookId::FromString(book->id);
         auto current_book = use_cases_.GetBookById(book_id);

@@ -8,7 +8,11 @@ void UseCasesImpl::AddAuthor(const std::string& name) {
 }
 
 void UseCasesImpl::DeleteAuthor(const domain::AuthorId& author_id) {
-    authors_.Delete(author_id);
+    pqxx::work w(connection_);
+    w.exec_params("DELETE FROM book_tags WHERE book_id IN (SELECT id FROM books WHERE author_id = $1)", author_id.ToString());
+    w.exec_params("DELETE FROM books WHERE author_id = $1", author_id.ToString());
+    w.exec_params("DELETE FROM authors WHERE id = $1", author_id.ToString());
+    w.commit();
 }
 
 void UseCasesImpl::EditAuthor(const domain::AuthorId& author_id, const std::string& new_name) {
@@ -43,7 +47,10 @@ void UseCasesImpl::AddBook(const domain::AuthorId& author_id,
 }
 
 void UseCasesImpl::DeleteBook(const domain::BookId& book_id) {
-    books_.Delete(book_id);
+    pqxx::work w(connection_);
+    w.exec_params("DELETE FROM book_tags WHERE book_id = $1", book_id.ToString());
+    w.exec_params("DELETE FROM books WHERE id = $1", book_id.ToString());
+    w.commit();
 }
 
 void UseCasesImpl::EditBook(const domain::BookId& book_id,
