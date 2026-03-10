@@ -241,37 +241,28 @@ bool View::AddBook(std::istream& cmd_input) const {
     return true;
 }
 
-bool View::EditAuthor(std::istream& cmd_input) const {
+bool View::DeleteAuthor(std::istream& cmd_input) const {
     try {
         std::string name;
         std::getline(cmd_input, name);
         boost::algorithm::trim(name);
 
-        bool with_name = !name.empty();
         std::optional<domain::AuthorId> author_id;
-        if (with_name) {
+        if (name.empty()) {
+            author_id = SelectAuthorId();
+        } else {
             auto author_opt = use_cases_.GetAuthorByName(name);
             if (author_opt) author_id = author_opt->GetId();
-        } else {
-            author_id = SelectAuthorId();
         }
 
         if (!author_id) {
-            if (with_name) {
-                output_ << "Failed to edit author" << std::endl;
-            }
+            output_ << "Failed to delete author" << std::endl;
             return true;
         }
 
-        output_ << "Enter new name:" << std::endl;
-        std::string new_name;
-        std::getline(input_, new_name);
-        boost::algorithm::trim(new_name);
-        if (new_name.empty()) throw std::runtime_error("Empty name");
-
-        use_cases_.EditAuthor(*author_id, new_name);
+        use_cases_.DeleteAuthor(*author_id);
     } catch (const std::exception&) {
-        output_ << "Failed to edit author" << std::endl;
+        output_ << "Failed to delete author" << std::endl;
     }
     return true;
 }
