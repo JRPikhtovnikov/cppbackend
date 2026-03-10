@@ -9,7 +9,7 @@ using namespace std::literals;
 
 Application::Application(const AppConfig& config)
     : db_{pqxx::connection{config.db_url}},
-      use_cases_{db_.GetAuthors(), db_.GetBooks(), db_.GetTags(), db_.connection()} {}
+      use_cases_{db_.GetAuthors(), db_.GetBooks(), db_.GetTags(), db_.GetConnection()} {}
 
 void Application::Run() {
     menu::Menu menu{std::cin, std::cout};

@@ -49,6 +49,7 @@ private:
 class Database {
 public:
     explicit Database(pqxx::connection connection);
+    pqxx::connection& GetConnection() { return connection_; }
     AuthorRepositoryImpl& GetAuthors() & { return authors_; }
     BookRepositoryImpl& GetBooks() & { return books_; }
     TagRepositoryImpl& GetTags() & { return tags_; }
