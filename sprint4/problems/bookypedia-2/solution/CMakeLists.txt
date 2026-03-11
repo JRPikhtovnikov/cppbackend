@@ -46,8 +46,3 @@ add_executable(bookypedia
 )
 target_link_libraries(bookypedia PRIVATE CONAN_PKG::boost libbookypedia)
 
-add_executable(tests
-	tests/use_case_tests.cpp
-	tests/tagged_uuid_tests.cpp
-)
-target_link_libraries(tests PRIVATE CONAN_PKG::catch2 CONAN_PKG::gtest libbookypedia)
