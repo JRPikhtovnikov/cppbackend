@@ -10,26 +10,33 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 add_library(libbookypedia STATIC
-	src/menu/menu.cpp
-	src/menu/menu.h
-	src/ui/view.cpp
-	src/ui/view.h
-	src/app/use_cases.h
-	src/app/use_cases_impl.cpp
-	src/app/use_cases_impl.h
-	src/domain/author.cpp
-	src/domain/author.h
-	src/domain/author_fwd.h
-	src/domain/book.h
-	src/domain/book_fwd.h
-	src/domain/tag.h
-	src/domain/tag.cpp
-	src/util/tagged.h
-	src/util/tagged_uuid.cpp
-	src/util/tagged_uuid.h
-	src/postgres/postgres.cpp
-	src/postgres/postgres.h
+	src/app/unit_of_work.h 
+	src/app/use_cases_impl.cpp 
+	src/app/use_cases_impl.h 
+	src/app/use_cases.h 
+	src/domain/author_fwd.h 
+	src/domain/author.cpp 
+	src/domain/author.h 
+	src/domain/book_fwd.h 
+	src/domain/book.cpp 
+	src/domain/book.h 
+	src/menu/menu.cpp 
+	src/menu/menu.h 
+	src/postgres/postgres.cpp 
+	src/postgres/postgres.h 
+	src/postgres/unit_of_work_impl.cpp 
+	src/postgres/unit_of_work_impl.h 
+	src/ui/view.cpp 
+	src/ui/view.h 
+	src/util/tag_util.h 
+	src/util/tagged_uuid.cpp 
+	src/util/tagged_uuid.h 
+	src/util/tagged.h 
+	src/bookypedia.cpp 
+	src/bookypedia.h 
+	src/main.cpp
 )
+
 target_link_libraries(libbookypedia PUBLIC CONAN_PKG::boost Threads::Threads CONAN_PKG::libpq CONAN_PKG::libpqxx)
 
 add_executable(bookypedia
