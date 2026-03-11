@@ -1,5 +1,6 @@
 #pragma once
 #include <pqxx/pqxx>
+
 #include "app/use_cases_impl.h"
 #include "postgres/postgres.h"
 
@@ -12,11 +13,12 @@ struct AppConfig {
 class Application {
 public:
     explicit Application(const AppConfig& config);
+
     void Run();
 
 private:
     postgres::Database db_;
-    app::UseCasesImpl use_cases_;
+
 };
 
 }  // namespace bookypedia

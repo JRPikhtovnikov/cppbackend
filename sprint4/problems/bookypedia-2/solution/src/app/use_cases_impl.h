@@ -1,49 +1,30 @@
 #pragma once
+#include "unit_of_work.h"
 #include "use_cases.h"
-#include "../postgres/postgres.h"  
-#include <pqxx/connection>
+#include <memory>
+#include <functional>
 
 namespace app {
-
 class UseCasesImpl : public UseCases {
 public:
-    explicit UseCasesImpl(domain::AuthorRepository& authors,
-                          domain::BookRepository& books,
-                          domain::TagRepository& tags,
-                          pqxx::connection& connection)
-        : authors_{authors}, books_{books}, tags_{tags}, connection_{connection} {}
-
-    // Авторы
+    using UnitOfWorkFactory = std::function<std::unique_ptr<UnitOfWork>()>;
+    explicit UseCasesImpl(UnitOfWorkFactory factory) : uow_factory_(std::move(factory)) { }
     void AddAuthor(const std::string& name) override;
-    void DeleteAuthor(const domain::AuthorId& author_id) override;
-    void EditAuthor(const domain::AuthorId& author_id, const std::string& new_name) override;
-    std::vector<domain::Author> GetAllAuthors() const override;
-    std::optional<domain::Author> GetAuthorByName(const std::string& name) const override;
-    std::optional<domain::Author> GetAuthorById(const domain::AuthorId& author_id) const override;
-
-    // Книги
-    void AddBook(const domain::AuthorId& author_id,
-                 const std::string& title,
-                 int year,
-                 const std::vector<std::string>& tags) override;
-    void DeleteBook(const domain::BookId& book_id) override;
-    void EditBook(const domain::BookId& book_id,
-                  const std::string& new_title,
-                  int new_year,
-                  const std::vector<std::string>& new_tags) override;
-    std::vector<domain::Book> GetAllBooks() const override;
-    std::vector<domain::Book> GetBooksByTitle(const std::string& title) const override;
-    std::optional<domain::Book> GetBookById(const domain::BookId& book_id) const override;
-    std::vector<domain::Book> GetBooksByAuthor(const domain::AuthorId& author_id) const override;
-
-    // Теги
-    std::vector<std::string> GetTagsByBook(const domain::BookId& book_id) const override;
+    void EditAuthor(const std::string& author_id, const std::string& new_name) override;
+    void DeleteAuthor(const std::string& author_id) override;
+    std::vector<AuthorInfo> GetAllAuthors() override;
+    std::optional<AuthorInfo> FindAuthorByName(const std::string& name) override;
+    void AddBook(const std::string& title, int publication_year, const std::string& author_id, const std::vector<std::string>& tags={}) override;
+    void EditBook(const std::string& book_id, const std::string& title, int publication_year, const std::vector<std::string>& tags) override;
+    void DeleteBook(const std::string& book_id) override;
+    std::vector<BookInfo> GetAllBooks() override;
+    std::vector<BookInfo> GetAuthorBooks(const std::string& author_id) override;
+    std::vector<BookInfo> FindBooksByTitle(const std::string& title) override;
+    std::optional<BookInfo> GetBookById(const std::string& book_id) override;
 
 private:
-    domain::AuthorRepository& authors_;
-    domain::BookRepository& books_;
-    domain::TagRepository& tags_;
-    pqxx::connection& connection_;
+    UnitOfWorkFactory uow_factory_;
 };
+
 
 }  // namespace app

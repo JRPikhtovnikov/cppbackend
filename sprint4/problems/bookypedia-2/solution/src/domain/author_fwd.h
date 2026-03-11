@@ -1,4 +1,5 @@
 #pragma once
+#include "../util/tagged_uuid.h"
 
 namespace domain {
 

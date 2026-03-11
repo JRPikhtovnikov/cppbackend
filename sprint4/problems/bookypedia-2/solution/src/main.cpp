@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+
 #include "bookypedia.h"
 
 using namespace std::literals;
@@ -21,7 +22,7 @@ bookypedia::AppConfig GetConfigFromEnv() {
 
 }  // namespace
 
-int main(int argc, const char* argv[]) {
+int main([[maybe_unused]] int argc, [[maybe_unused]] const char* argv[]) {
     try {
         bookypedia::Application app{GetConfigFromEnv()};
         app.Run();
@@ -29,5 +30,4 @@ int main(int argc, const char* argv[]) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
     }
-    return EXIT_SUCCESS;
 }

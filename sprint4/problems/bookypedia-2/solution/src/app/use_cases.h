@@ -1,40 +1,39 @@
 #pragma once
+
 #include <string>
 #include <vector>
 #include <optional>
-#include "../domain/author.h"
-#include "../domain/book.h"
-#include "../domain/tag.h"
 
 namespace app {
 
+
+struct AuthorInfo {
+    std::string id;
+    std::string name;
+};
+
+struct BookInfo {
+    std::string id;
+    std::string author_name;
+    std::string title;
+    int publication_year;
+    std::vector<std::string> tags;
+};
+
 class UseCases {
 public:
-    // Авторы
     virtual void AddAuthor(const std::string& name) = 0;
-    virtual void DeleteAuthor(const domain::AuthorId& author_id) = 0;
-    virtual void EditAuthor(const domain::AuthorId& author_id, const std::string& new_name) = 0;
-    virtual std::vector<domain::Author> GetAllAuthors() const = 0;
-    virtual std::optional<domain::Author> GetAuthorByName(const std::string& name) const = 0;
-    virtual std::optional<domain::Author> GetAuthorById(const domain::AuthorId& author_id) const = 0;
-
-    // Книги
-    virtual void AddBook(const domain::AuthorId& author_id,
-                         const std::string& title,
-                         int year,
-                         const std::vector<std::string>& tags) = 0;
-    virtual void DeleteBook(const domain::BookId& book_id) = 0;
-    virtual void EditBook(const domain::BookId& book_id,
-                          const std::string& new_title,
-                          int new_year,
-                          const std::vector<std::string>& new_tags) = 0;
-    virtual std::vector<domain::Book> GetAllBooks() const = 0;
-    virtual std::vector<domain::Book> GetBooksByTitle(const std::string& title) const = 0;
-    virtual std::optional<domain::Book> GetBookById(const domain::BookId& book_id) const = 0;
-    virtual std::vector<domain::Book> GetBooksByAuthor(const domain::AuthorId& author_id) const = 0;
-
-    // Теги
-    virtual std::vector<std::string> GetTagsByBook(const domain::BookId& book_id) const = 0;
+    virtual void EditAuthor(const std::string& author_id, const std::string& new_name) = 0;
+    virtual void DeleteAuthor(const std::string& author_id) = 0;
+    virtual std::vector<AuthorInfo> GetAllAuthors() = 0;
+    virtual std::optional<AuthorInfo> FindAuthorByName(const std::string& name) = 0;
+    virtual void AddBook(const std::string& title, int publication_year, const std::string& author_id, const std::vector<std::string>& tags={}) = 0;
+    virtual void EditBook(const std::string& book_id, const std::string& title, int publication_year, const std::vector<std::string>& tags) = 0;
+    virtual void DeleteBook(const std::string& book_id) = 0;
+    virtual std::vector<BookInfo> GetAllBooks() = 0;
+    virtual std::vector<BookInfo> GetAuthorBooks(const std::string& author_id) = 0;
+    virtual std::vector<BookInfo> FindBooksByTitle(const std::string& title) = 0;
+    virtual std::optional<BookInfo> GetBookById(const std::string& book_id) = 0;
 
 protected:
     ~UseCases() = default;

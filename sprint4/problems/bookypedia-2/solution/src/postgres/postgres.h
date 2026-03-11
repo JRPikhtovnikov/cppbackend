@@ -1,64 +1,53 @@
 #pragma once
 #include <pqxx/connection>
 #include <pqxx/transaction>
+
 #include "../domain/author.h"
 #include "../domain/book.h"
-#include "../domain/tag.h"
+#include "../app/unit_of_work.h"
 
 namespace postgres {
 
 class AuthorRepositoryImpl : public domain::AuthorRepository {
 public:
-    explicit AuthorRepositoryImpl(pqxx::connection& connection);
+    explicit AuthorRepositoryImpl(pqxx::work& work) : work_(work) { }
     void Save(const domain::Author& author) override;
-    void Delete(const domain::AuthorId& author_id) override;
-    std::vector<domain::Author> GetAllAuthors() const override;
-    std::optional<domain::Author> GetByName(const std::string& name) const override;
-    std::optional<domain::Author> GetById(const domain::AuthorId& author_id) const override;
-
+    void Update(const domain::Author& author) override;
+    void Delete(const domain::AuthorId& id) override;
+    std::vector<std::pair<domain::AuthorId, std::string>> GetAll() override;
+    std::optional<domain::Author> FindById(const domain::AuthorId& id) override;
+    std::optional<domain::Author> FindByName(const std::string& name) override;
 private:
-    pqxx::connection& connection_;
+     pqxx::work& work_;
 };
 
 class BookRepositoryImpl : public domain::BookRepository {
 public:
-    explicit BookRepositoryImpl(pqxx::connection& connection);
+    explicit BookRepositoryImpl(pqxx::work& work) : work_(work) { }
+
     void Save(const domain::Book& book) override;
-    void Delete(const domain::BookId& book_id) override;
-    void DeleteByAuthor(const domain::AuthorId& author_id) override;
-    std::vector<domain::Book> GetAllBooks() const override;
-    std::vector<domain::Book> GetBooksByAuthor(const domain::AuthorId& author_id) const override;
-    std::vector<domain::Book> GetBooksByTitle(const std::string& title) const override;
-    std::optional<domain::Book> GetById(const domain::BookId& book_id) const override;
-
+    void Update(const domain::Book& book) override;
+    void Delete(const domain::BookId& id) override;
+    std::vector<std::pair<domain::AuthorId, std::string>> GetAllAuthors() override;
+    std::vector<domain::Book> GetBooks() override;
+    std::vector<domain::Book> GetAuthorBooks(const domain::AuthorId& author_id) override;
+    std::optional<domain::Book> FindById(const domain::BookId& id) override;
+    std::vector<domain::Book> FindByTitle(const std::string& title) override;
 private:
-    pqxx::connection& connection_;
-};
-
-class TagRepositoryImpl : public domain::TagRepository {
-public:
-    explicit TagRepositoryImpl(pqxx::connection& connection);
-    void Save(const domain::Tag& tag) override;
-    void DeleteByBook(const domain::BookId& book_id) override;
-    std::vector<domain::Tag> GetByBook(const domain::BookId& book_id) const override;
-
-private:
-    pqxx::connection& connection_;
+    std::vector<std::string> GetBookTags(const domain::BookId& book_id);
+    void SaveBookTags(const domain::BookId& book_id, const std::vector<std::string>& tags);
+    void DeleteBookTags(const domain::BookId& book_id);
+    pqxx::work& work_;
 };
 
 class Database {
 public:
     explicit Database(pqxx::connection connection);
-    pqxx::connection& GetConnection() { return connection_; }
-    AuthorRepositoryImpl& GetAuthors() & { return authors_; }
-    BookRepositoryImpl& GetBooks() & { return books_; }
-    TagRepositoryImpl& GetTags() & { return tags_; }
+
+    std::unique_ptr<app::UnitOfWork> CreateUnitOfWork();
 
 private:
     pqxx::connection connection_;
-    AuthorRepositoryImpl authors_;
-    BookRepositoryImpl books_;
-    TagRepositoryImpl tags_;
 };
 
 }  // namespace postgres

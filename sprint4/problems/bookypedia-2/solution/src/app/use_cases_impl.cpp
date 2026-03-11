@@ -1,113 +1,219 @@
 #include "use_cases_impl.h"
-#include <pqxx/transaction>
+
+#include "../domain/author.h"
+#include "../domain/book.h"
+#include <stdexcept>
+
+#include <iostream>
 
 namespace app {
+using namespace domain;
 
 void UseCasesImpl::AddAuthor(const std::string& name) {
-    authors_.Save(domain::Author(domain::AuthorId::New(), name));
+    auto uow = uow_factory_();
+    auto& authors = uow->Authors();
+    authors.Save({domain::AuthorId::New(), name});
+    uow->Commit();
 }
 
-void UseCasesImpl::DeleteAuthor(const domain::AuthorId& author_id) {
-    pqxx::work w(connection_);
-    w.exec_params("DELETE FROM book_tags WHERE book_id IN (SELECT id FROM books WHERE author_id = $1)", author_id.ToString());
-    w.exec_params("DELETE FROM books WHERE author_id = $1", author_id.ToString());
-    w.exec_params("DELETE FROM authors WHERE id = $1", author_id.ToString());
-    w.commit();
-}
-
-void UseCasesImpl::EditAuthor(const domain::AuthorId& author_id, const std::string& new_name) {
-    auto author = authors_.GetById(author_id);
-    if (!author) return;
-    authors_.Save(domain::Author(author_id, new_name));  // обновление через Save с тем же id
-}
-
-std::vector<domain::Author> UseCasesImpl::GetAllAuthors() const {
-    return authors_.GetAllAuthors();
-}
-
-std::optional<domain::Author> UseCasesImpl::GetAuthorByName(const std::string& name) const {
-    return authors_.GetByName(name);
-}
-
-std::optional<domain::Author> UseCasesImpl::GetAuthorById(const domain::AuthorId& author_id) const {
-    return authors_.GetById(author_id);
-}
-
-void UseCasesImpl::AddBook(const domain::AuthorId& author_id,
-                           const std::string& title,
-                           int year,
-                           const std::vector<std::string>& tags) {
-    pqxx::work w(connection_);
-    domain::BookId book_id = domain::BookId::New();
-    
-    w.exec_params(
-        "INSERT INTO books (id, author_id, title, publication_year) VALUES ($1, $2, $3, $4)",
-        book_id.ToString(), author_id.ToString(), title, year);
-    
-    for (const auto& tag : tags) {
-        w.exec_params(
-            "INSERT INTO book_tags (book_id, tag) VALUES ($1, $2)",
-            book_id.ToString(), tag);
+void UseCasesImpl::EditAuthor(const std::string& author_id, const std::string& new_name) {
+    auto uow = uow_factory_();
+    auto& authors = uow->Authors();
+    AuthorId id = AuthorId::FromString(author_id);
+    auto author = authors.FindById(id);
+    if (!author) {
+        throw std::runtime_error("Author not found");
     }
-    
-    w.commit();
+    author->SetName(new_name);
+    authors.Update(*author);
+    uow->Commit();
 }
 
-void UseCasesImpl::DeleteBook(const domain::BookId& book_id) {
-    pqxx::work w(connection_);
-    w.exec_params("DELETE FROM book_tags WHERE book_id = $1", book_id.ToString());
-    w.exec_params("DELETE FROM books WHERE id = $1", book_id.ToString());
-    w.commit();
+void UseCasesImpl::DeleteAuthor(const std::string& author_id) {
+   try {
+        auto uow = uow_factory_();
+        auto& authors = uow->Authors();
+        AuthorId id = AuthorId::FromString(author_id);
+        authors.Delete(id);
+        uow->Commit();
+   }
+   catch(const std::runtime_error& e) {
+       throw std::runtime_error(e.what());
+   }
 }
 
-void UseCasesImpl::EditBook(const domain::BookId& book_id,
-                            const std::string& new_title,
-                            int new_year,
-                            const std::vector<std::string>& new_tags) {
-    // Проверка существования книги (можно выполнить в той же транзакции, но для простоты оставим)
-    auto book_opt = books_.GetById(book_id);
-    if (!book_opt) return;
-
-    pqxx::work w(connection_);
-    
-    w.exec_params(
-        "UPDATE books SET title = $1, publication_year = $2 WHERE id = $3",
-        new_title, new_year, book_id.ToString());
-    
-    w.exec_params("DELETE FROM book_tags WHERE book_id = $1", book_id.ToString());
-    
-    for (const auto& tag : new_tags) {
-        w.exec_params(
-            "INSERT INTO book_tags (book_id, tag) VALUES ($1, $2)",
-            book_id.ToString(), tag);
-    }
-    
-    w.commit();
-}
-
-std::vector<domain::Book> UseCasesImpl::GetAllBooks() const {
-    return books_.GetAllBooks();
-}
-
-std::vector<domain::Book> UseCasesImpl::GetBooksByTitle(const std::string& title) const {
-    return books_.GetBooksByTitle(title);
-}
-
-std::optional<domain::Book> UseCasesImpl::GetBookById(const domain::BookId& book_id) const {
-    return books_.GetById(book_id);
-}
-
-std::vector<domain::Book> UseCasesImpl::GetBooksByAuthor(const domain::AuthorId& author_id) const {
-    return books_.GetBooksByAuthor(author_id);
-}
-
-std::vector<std::string> UseCasesImpl::GetTagsByBook(const domain::BookId& book_id) const {
-    std::vector<std::string> result;
-    auto tags = tags_.GetByBook(book_id);
-    for (const auto& t : tags) {
-        result.push_back(t.GetTag());
+std::vector<AuthorInfo> UseCasesImpl::GetAllAuthors() {
+    auto uow = uow_factory_();
+    auto& authors = uow->Authors();
+    auto author_pairs = authors.GetAll();
+    std::vector<AuthorInfo> result;
+    result.reserve(author_pairs.size());
+    for (const auto& [id, name] : author_pairs) {
+        result.push_back({id.ToString(), name});
     }
     return result;
+}
+
+std::optional<AuthorInfo> UseCasesImpl::FindAuthorByName(const std::string& name) {
+    auto uow = uow_factory_();
+    auto& authors = uow->Authors();
+    auto author = authors.FindByName(name);
+    if (!author) {
+        return std::nullopt;
+    }
+    return AuthorInfo{author->GetId().ToString(), author->GetName()};
+}
+
+
+
+void UseCasesImpl::AddBook(const std::string& title, int publication_year, const std::string& author_id, const std::vector<std::string>& tags) {
+    auto uow = uow_factory_();
+    auto& books = uow->Books();
+    AuthorId auth_id = AuthorId::FromString(author_id);
+    std::vector<std::string> tag_infos;
+    tag_infos.reserve(tags.size());
+    for (const auto& tag : tags) {
+        tag_infos.push_back(tag);
+    }
+    Book book{BookId::New(), auth_id, title, publication_year, std::move(tag_infos)};
+    books.Save(book);
+    uow->Commit();
+}
+
+void UseCasesImpl::EditBook(const std::string& book_id, const std::string& title, int publication_year, const std::vector<std::string>& tags) {
+    auto uow = uow_factory_();
+    auto& books = uow->Books();
+    BookId id = BookId::FromString(book_id);
+    auto book = books.FindById(id);
+    if (!book) {
+        throw std::runtime_error("Book not found");
+    }
+    book->SetTitle(title);
+    book->SetPublicationYear(publication_year);
+    std::vector<std::string> tag_infos;
+    tag_infos.reserve(tags.size());
+    for (const auto& tag : tags) {
+        tag_infos.push_back({tag});
+    }
+    book->SetTags(std::move(tag_infos));
+    books.Update(*book);
+    uow->Commit();
+}
+
+void UseCasesImpl::DeleteBook(const std::string& book_id) {
+    try{
+        auto uow = uow_factory_();
+        auto& books = uow->Books();
+        BookId id = BookId::FromString(book_id);
+        books.Delete(id);
+        uow->Commit();
+    } catch(const std::runtime_error& e) {
+        throw std::runtime_error(e.what());
+    }
+}
+
+std::vector<BookInfo> UseCasesImpl::GetAllBooks() {
+    auto uow = uow_factory_();
+    auto& books = uow->Books();
+    auto book_list = books.GetBooks();
+    std::vector<BookInfo> result;
+    result.reserve(book_list.size());
+    for (const auto& book : book_list) {
+        std::vector<std::string> tags;
+        tags.reserve(book.GetTags().size());
+        for (const auto& tag : book.GetTags()) {
+            tags.push_back(tag);
+        }
+        auto& authors = uow->Authors();
+        auto author = authors.FindById(book.GetAuthorId());
+        result.push_back({
+            book.GetId().ToString(),
+            author ? author->GetName() : "Unknown",
+            book.GetTitle(),
+            book.GetPublicationYear(),
+            std::move(tags)
+        });
+    }
+    return result;
+}
+
+std::vector<BookInfo> UseCasesImpl::GetAuthorBooks(const std::string& author_id) {
+    AuthorId auth_id = AuthorId::FromString(author_id);
+    auto uow = uow_factory_();
+    auto& books = uow->Books();
+    auto book_list = books.GetAuthorBooks(auth_id);
+    std::vector<BookInfo> result;
+    result.reserve(book_list.size());
+    auto& authors = uow->Authors();
+    auto author = authors.FindById(auth_id);
+    std::string author_name = author ? author->GetName() : "Unknown";
+    for (const auto& book : book_list) {
+        std::vector<std::string> tags;
+        tags.reserve(book.GetTags().size());
+        for (const auto& tag : book.GetTags()) {
+            tags.push_back(tag);
+        }
+        result.push_back({
+            book.GetId().ToString(),
+            author_name,
+            book.GetTitle(),
+            book.GetPublicationYear(),
+            std::move(tags)
+        });
+    }
+    return result;
+}
+
+std::vector<BookInfo> UseCasesImpl::FindBooksByTitle(const std::string& title) {
+    auto uow = uow_factory_();
+    auto& books = uow->Books();
+    //auto book_list = books.FindBooksByTitle(title);
+    auto book_list = books.FindByTitle(title);
+    std::vector<BookInfo> result;
+    result.reserve(book_list.size());
+    auto& authors = uow->Authors();
+    for (const auto& book : book_list) {
+        std::vector<std::string> tags;
+        tags.reserve(book.GetTags().size());
+        for (const auto& tag : book.GetTags()) {
+            tags.push_back(tag);
+        }
+        auto author = authors.FindById(book.GetAuthorId());
+        result.push_back({
+            book.GetId().ToString(),
+            //book.GetAuthorId().ToString(),
+            author ? author->GetName() : "Unknown",
+            book.GetTitle(),
+            book.GetPublicationYear(),
+            std::move(tags)
+        });
+    }
+    return result;
+}
+
+std::optional<BookInfo> UseCasesImpl::GetBookById(const std::string& book_id) {
+    BookId id = BookId::FromString(book_id);
+    auto uow = uow_factory_();
+    auto& books = uow->Books();
+    auto book = books.FindById(id);
+    if (!book) {
+        return std::nullopt;
+    }
+    std::vector<std::string> tags;
+    tags.reserve(book->GetTags().size());
+    for (const auto& tag : book->GetTags()) {
+        tags.push_back(tag);
+    }
+    auto& authors = uow->Authors();
+    auto author = authors.FindById(book->GetAuthorId());
+    return BookInfo{
+        book->GetId().ToString(),
+        //book->GetAuthorId().ToString(),
+        author ? author->GetName() : "Unknown",
+        book->GetTitle(),
+        book->GetPublicationYear(),
+        std::move(tags)
+    };
 }
 
 }  // namespace app

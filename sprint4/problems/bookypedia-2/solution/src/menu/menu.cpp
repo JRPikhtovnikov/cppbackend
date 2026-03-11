@@ -5,17 +5,13 @@
 
 namespace menu {
 
-Menu::Menu(std::istream& input, std::ostream& output)
-    : input_{input}
-    , output_{output} {
-}
+Menu::Menu(std::istream& input, std::ostream& output) : input_{input}, output_{output} { }
 
-void Menu::AddAction(std::string action_name, std::string args, std::string description,
-                     Handler handler) {
+void Menu::AddAction(std::string action_name, std::string args, std::string description, Handler handler) {
     if (!actions_
-             .try_emplace(std::move(action_name), std::move(handler), std::move(args),
-                          std::move(description))
-             .second) {
+        .try_emplace(std::move(action_name), std::move(handler), std::move(args), std::move(description))
+        .second)
+    {
         throw std::invalid_argument("A command has been added already");
     }
 }
