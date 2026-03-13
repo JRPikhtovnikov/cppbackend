@@ -67,6 +67,10 @@ add_executable(game_server_tests
     src/model.cpp
     src/json_loader.h
     src/json_loader.cpp
+    tests/loot_generator_tests.cpp
+    tests/test_player.cpp
+    tests/test_json_loader.cpp
+    tests/test_main.cpp
 )
 
 target_include_directories(game_server_tests PRIVATE 
