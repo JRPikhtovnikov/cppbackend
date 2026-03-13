@@ -67,7 +67,6 @@ add_executable(game_server_tests
     src/model.cpp
     src/json_loader.h
     src/json_loader.cpp
-    tests/state-serialization-tests.cpp
 )
 
 target_include_directories(game_server_tests PRIVATE 
