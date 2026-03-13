@@ -86,6 +86,7 @@ struct SessionRepr {
 // Корневая структура состояния игры
 struct GameStateRepr {
     uint32_t next_player_id = 0;
+    uint32_t next_session_id = 0;
     std::vector<SessionRepr> sessions;
     std::vector<PlayerRepr> players;
     std::vector<TokenRepr> tokens;
@@ -93,7 +94,7 @@ struct GameStateRepr {
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-        ar & next_player_id & sessions & players & tokens & random_generator_state;
+        ar & next_player_id & next_session_id & sessions & players & tokens & random_generator_state;
     }
 };
 

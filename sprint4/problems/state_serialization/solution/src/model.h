@@ -322,6 +322,8 @@ public:
         std::istringstream iss(state);
         iss >> loot_engine_;
     }
+
+    
 private:
     SessionId id_;
     Map::Id map_id_;
@@ -363,6 +365,20 @@ public:
 
     const auto& GetAllSessions() const { return sessions_; }
 
+    void SetNextSessionId(SessionId id) noexcept { next_session_id_ = id; }
+    
+    SessionId GetNextSessionId() const noexcept { return next_session_id_; }
+
+    // Создание сессии с заданным ID (используется при загрузке)
+    GameSession& CreateSessionWithId(SessionId id, const Map::Id& map_id,
+                                      double loot_period, double loot_probability) {
+        auto session = std::make_unique<GameSession>(id, map_id, loot_period, loot_probability);
+        GameSession& ref = *session;
+        sessions_.emplace(id, std::move(session));
+        map_to_session_.emplace(map_id, id);
+        // Важно: не увеличиваем next_session_id_, так как ID задан явно
+        return ref;
+    }
 private:
     struct MapIdHash {
         size_t operator()(const Map::Id& id) const noexcept {

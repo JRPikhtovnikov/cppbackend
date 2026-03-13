@@ -144,10 +144,15 @@ public:
             tokens_.Clear();
             sessions_ = model::GameSessions();
             next_player_id_ = repr.next_player_id;
+            sessions_.SetNextSessionId(repr.next_session_id);
 
             // Сначала восстанавливаем сессии
             for (const auto& srep : repr.sessions) {
-                auto& session = sessions_.GetOrCreateByMap(model::Map::Id(srep.map_id), loot_period_, loot_probability_);
+                auto& session = sessions_.CreateSessionWithId(
+                    srep.id,                                   // используем сохранённый ID
+                    model::Map::Id(srep.map_id),
+                    loot_period_, loot_probability_
+                );
                 session.SetNextLootId(srep.next_loot_id);
                 
                 // Восстанавливаем состояние генератора
@@ -206,6 +211,7 @@ public:
 
         serialization::GameStateRepr repr;
         repr.next_player_id = next_player_id_;
+        repr.next_session_id = sessions_.GetNextSessionId(); 
         repr.random_generator_state = GetRandomGeneratorState();
         
         for (const auto& [sid, session_ptr] : sessions_.GetAllSessions()) {
