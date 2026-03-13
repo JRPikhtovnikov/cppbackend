@@ -115,7 +115,7 @@ public:
             return;
 
         std::ifstream ifs(state_file_path_->string());
-        if (!ifs)
+        if (!ifs.is_open())
             throw std::runtime_error("Cannot open state file for reading: " + state_file_path_->string());
 
         try {
@@ -134,9 +134,20 @@ public:
             sessions_ = model::GameSessions();
             next_player_id_ = repr.next_player_id;
 
+            // Сначала восстанавливаем сессии
             for (const auto& srep : repr.sessions) {
                 auto& session = sessions_.GetOrCreateByMap(model::Map::Id(srep.map_id), loot_period_, loot_probability_);
                 session.SetNextLootId(srep.next_loot_id);
+                
+                // Восстанавливаем состояние генератора
+                session.SetLootEngineState(srep.loot_engine_state);
+                
+                // Восстанавливаем игроков сессии
+                for (auto pid : srep.player_ids) {
+                    session.AddPlayer(pid);
+                }
+                
+                // Восстанавливаем предметы
                 std::unordered_map<uint32_t, model::LostObject> loot_objects;
                 for (const auto& lrep : srep.loot_objects) {
                     model::Vec2 pos;
@@ -164,6 +175,11 @@ public:
                 for (const auto& item : prep.bag) {
                     player.AddLoot(item.id, item.type, item.value);
                 }
+                
+                auto* session = sessions_.Find(prep.session_id);
+                if (session) {
+                    session->AddPlayer(prep.id);
+                }
             }
 
             for (const auto& trep : repr.tokens) {
@@ -187,8 +203,11 @@ public:
             const auto& session = *session_ptr;
             serialization::SessionRepr srep;
             srep.id = session.GetId();
-            srep.map_id = *session.GetMapId(); 
+            srep.map_id = *session.GetMapId();
             srep.next_loot_id = session.GetNextLootId();
+            srep.player_ids = session.GetPlayers();
+            srep.loot_engine_state = session.GetLootEngineState();
+            
             for (const auto& [lid, obj] : session.GetLootObjects()) {
                 serialization::LostObjectRepr lrep;
                 lrep.id = obj.id;

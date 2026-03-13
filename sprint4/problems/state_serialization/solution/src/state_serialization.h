@@ -16,12 +16,12 @@
 namespace geom{
     // Сериализация геометрических типов
     template <typename Archive>
-    void serialize(Archive& ar, geom::Point2D& p, [[maybe_unused]] const unsigned int version) {
+    void serialize(Archive& ar, Point2D& p, [[maybe_unused]] const unsigned int version) {
         ar & p.x & p.y;
     }
 
     template <typename Archive>
-    void serialize(Archive& ar, geom::Vec2D& v, [[maybe_unused]] const unsigned int version) {
+    void serialize(Archive& ar, Vec2D& v, [[maybe_unused]] const unsigned int version) {
         ar & v.x & v.y;
     }
 }
@@ -73,11 +73,13 @@ struct SessionRepr {
     uint32_t id = 0;
     std::string map_id;
     uint32_t next_loot_id = 0;
+    std::vector<uint32_t> player_ids;
     std::vector<LostObjectRepr> loot_objects;
+    std::string loot_engine_state;
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-        ar & id & map_id & next_loot_id & loot_objects;
+        ar & id & map_id & next_loot_id & player_ids & loot_objects & loot_engine_state;
     }
 };
 

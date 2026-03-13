@@ -312,6 +312,16 @@ public:
     void SetNextLootId(uint32_t id) noexcept { next_loot_id_ = id; }
     void SetLootObjects(const std::unordered_map<uint32_t, LostObject>& loot) { loot_objects_ = loot; }
 
+    std::string GetLootEngineState() const {
+        std::ostringstream oss;
+        oss << loot_engine_;
+        return oss.str();
+    }
+    
+    void SetLootEngineState(const std::string& state) {
+        std::istringstream iss(state);
+        iss >> loot_engine_;
+    }
 private:
     SessionId id_;
     Map::Id map_id_;
