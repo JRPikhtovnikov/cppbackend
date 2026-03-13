@@ -144,7 +144,7 @@ int main(int argc, const char* argv[]) {
             }
         }
 
-        http_logging::LoggingRequestHandler logging_handler{handler};
+        http_logging::LoggingRequestHandler logging_handler{*handler};
 
         http_server::ServeHttp(ioc, {address, port}, logging_handler);
 
@@ -163,7 +163,7 @@ int main(int argc, const char* argv[]) {
         logger::LogServerStarted(address.to_string(), port);
 
         RunWorkers(std::max(1u, num_threads), [&ioc] { ioc.run(); });
-        
+
         if (args.state_file) {
             try {
                 handler->SaveState();

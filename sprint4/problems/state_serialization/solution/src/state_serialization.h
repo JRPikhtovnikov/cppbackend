@@ -13,20 +13,21 @@
 #include <string>
 #include <vector>
 
+namespace geom{
+    // Сериализация геометрических типов
+    template <typename Archive>
+    void serialize(Archive& ar, geom::Point2D& p, [[maybe_unused]] const unsigned int version) {
+        ar & p.x & p.y;
+    }
+
+    template <typename Archive>
+    void serialize(Archive& ar, geom::Vec2D& v, [[maybe_unused]] const unsigned int version) {
+        ar & v.x & v.y;
+    }
+}
+
 namespace serialization {
 
-// Сериализация геометрических типов
-template <typename Archive>
-void serialize(Archive& ar, geom::Point2D& p, [[maybe_unused]] const unsigned int version) {
-    ar & p.x & p.y;
-}
-
-template <typename Archive>
-void serialize(Archive& ar, geom::Vec2D& v, [[maybe_unused]] const unsigned int version) {
-    ar & v.x & v.y;
-}
-
-// Вспомогательная структура для LostObject
 struct LostObjectRepr {
     uint32_t id = 0;
     int type = 0;
@@ -39,17 +40,16 @@ struct LostObjectRepr {
     }
 };
 
-// Вспомогательная структура для игрока
 struct PlayerRepr {
     uint32_t id = 0;
     std::string name;
     uint32_t session_id = 0;
     geom::Point2D pos;
     geom::Vec2D speed;
-    int dir = 0;                       // model::Direction как int
+    int dir = 0;                       
     int score = 0;
     size_t bag_capacity = 0;
-    std::vector<model::BagItem> bag;   // BagItem должен быть сериализуем
+    std::vector<model::BagItem> bag;   
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
@@ -96,7 +96,6 @@ struct GameStateRepr {
 
 } // namespace serialization
 
-// Сериализация BagItem (добавляем прямо в model.h или здесь)
 namespace model {
     template <typename Archive>
     void serialize(Archive& ar, BagItem& item, [[maybe_unused]] const unsigned int version) {
