@@ -89,10 +89,11 @@ struct GameStateRepr {
     std::vector<SessionRepr> sessions;
     std::vector<PlayerRepr> players;
     std::vector<TokenRepr> tokens;
+    std::string random_generator_state; 
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-        ar & next_player_id & sessions & players & tokens;
+        ar & next_player_id & sessions & players & tokens & random_generator_state;
     }
 };
 

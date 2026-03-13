@@ -108,6 +108,17 @@ public:
 
     void Tick(std::chrono::milliseconds delta) {
         AdvanceGameTime(delta.count());
+        }
+
+        std::string GetRandomGeneratorState() const {
+        std::ostringstream oss;
+        oss << gen_;
+        return oss.str();
+    }
+
+    void SetRandomGeneratorState(const std::string& state) {
+        std::istringstream iss(state);
+        iss >> gen_;
     }
 
     void LoadState() {
@@ -175,17 +186,14 @@ public:
                 for (const auto& item : prep.bag) {
                     player.AddLoot(item.id, item.type, item.value);
                 }
-                
-                auto* session = sessions_.Find(prep.session_id);
-                if (session) {
-                    session->AddPlayer(prep.id);
-                }
             }
 
             for (const auto& trep : repr.tokens) {
                 tokens_.Add(model::Token(trep.token), trep.player_id);
             }
 
+            SetRandomGeneratorState(repr.random_generator_state); 
+        
             time_since_last_save_ = std::chrono::milliseconds::zero();
         } catch (const std::exception& e) {
             throw std::runtime_error("Failed to load state: " + std::string(e.what()));
@@ -198,7 +206,8 @@ public:
 
         serialization::GameStateRepr repr;
         repr.next_player_id = next_player_id_;
-
+        repr.random_generator_state = GetRandomGeneratorState();
+        
         for (const auto& [sid, session_ptr] : sessions_.GetAllSessions()) {
             const auto& session = *session_ptr;
             serialization::SessionRepr srep;
