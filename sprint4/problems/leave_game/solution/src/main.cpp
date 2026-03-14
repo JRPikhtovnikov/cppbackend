@@ -101,6 +101,11 @@ int main(int argc, const char* argv[]) {
         }
         const auto& args = *parsed;
 
+        const char* config_env = std::getenv("CONFIG_PATH");
+        if (config_env) {
+            args.config_file = fs::path(config_env);
+        }
+
         const char* db_url = std::getenv("GAME_DB_URL");
         if (!db_url) {
             throw std::runtime_error("GAME_DB_URL environment variable not set");
