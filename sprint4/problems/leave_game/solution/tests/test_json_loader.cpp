@@ -40,9 +40,9 @@ TEST_CASE("JSON loader basic functionality", "[json]") {
     json_loader::LootTypesMap loot_types;
     json_loader::LootValuesMap loot_values;
     double loot_period = 0, loot_prob = 0;
-    
+    double dog_retirement_time = 60.0;
     auto game = json_loader::LoadGame(config_path, loot_types, loot_values, 
-                                      loot_period, loot_prob);
+                                      loot_period, loot_prob, dog_retirement_time);
     
     SECTION("Game loaded correctly") {
         CHECK(game.GetMaps().size() == 1);
