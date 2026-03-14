@@ -24,8 +24,6 @@
 #include <vector>
 #include <fstream>
 
-#define BOOST_NO_CXX17_HDR_STRING_VIEW
-
 namespace api {
 using boost::beast::string_view;
 
@@ -346,20 +344,21 @@ private:
 
         auto target = req.target();
         auto query_pos = target.find('?');
-        if (query_pos != std::string_view::npos) {
-            std::string_view query = target.substr(query_pos + 1);
-            auto parse_param = [&](std::string_view name) -> std::optional<size_t> {
+        if (query_pos != boost::beast::string_view::npos) {
+            boost::beast::string_view query = target.substr(query_pos + 1);
+
+            auto parse_param = [&](boost::beast::string_view name) -> std::optional<size_t> {
                 auto pos = query.find(name);
-                if (pos == std::string_view::npos) return std::nullopt;
+                if (pos == boost::beast::string_view::npos) return std::nullopt;
                 auto eq = query.find('=', pos);
-                if (eq == std::string_view::npos) return std::nullopt;
+                if (eq == boost::beast::string_view::npos) return std::nullopt;
                 auto val_start = eq + 1;
                 auto val_end = query.find('&', val_start);
-                if (val_end == std::string_view::npos) val_end = query.size();
-                std::string val(query.substr(val_start, val_end - val_start));
+                if (val_end == boost::beast::string_view::npos) val_end = query.size();
+                boost::beast::string_view val_str = query.substr(val_start, val_end - val_start);
                 char* end;
-                long long v = std::strtoll(val.c_str(), &end, 10);
-                if (end == val.c_str() || v < 0) return std::nullopt;
+                long long v = std::strtoll(std::string(val_str).c_str(), &end, 10);
+                if (end == val_str.data() || v < 0) return std::nullopt;
                 return static_cast<size_t>(v);
             };
 
