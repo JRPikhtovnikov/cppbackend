@@ -98,7 +98,7 @@ model::Game LoadGame(const std::filesystem::path& json_path,
         default_bag_capacity = json::value_to<double>(*v);
     }
 
-    double dog_retirement_time = 60.0;
+    dog_retirement_time = 60.0;
     if (const auto* v = root.if_contains("dogRetirementTime")) {
         dog_retirement_time = json::value_to<double>(*v);
     }
