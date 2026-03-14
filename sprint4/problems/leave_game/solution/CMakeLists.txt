@@ -29,6 +29,8 @@ add_library(game_lib STATIC
     src/collision_detector.h
     src/collision_detector.cpp
     src/state_serialization.h
+    src/database.h
+    src/database.cpp
 )
 
 target_include_directories(game_lib PUBLIC 
@@ -67,6 +69,7 @@ target_link_libraries(game_server
 )
 
 add_executable(game_server_tests
+
     src/model.h
     src/model.cpp
     src/json_loader.h
