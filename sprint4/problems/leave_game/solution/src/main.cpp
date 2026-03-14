@@ -121,7 +121,6 @@ int main(int argc, const char* argv[]) {
             throw std::runtime_error("Static directory does not exist: " + fs::absolute(args.www_root).string());
         }
 
-        const unsigned num_threads = std::thread::hardware_concurrency();
         net::io_context ioc(std::max(1u, num_threads));
 
         net::signal_set signals(ioc, SIGINT, SIGTERM);
