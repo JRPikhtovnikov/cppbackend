@@ -24,6 +24,8 @@
 #include <vector>
 #include <fstream>
 
+#define BOOST_NO_CXX17_HDR_STRING_VIEW
+
 namespace api {
 using boost::beast::string_view;
 
