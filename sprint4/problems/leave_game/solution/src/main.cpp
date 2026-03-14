@@ -99,11 +99,11 @@ int main(int argc, const char* argv[]) {
         if (!parsed) {
             return EXIT_SUCCESS;
         }
-        const auto& args = *parsed;
+        auto& args = *parsed;
 
         const char* config_env = std::getenv("CONFIG_PATH");
         if (config_env) {
-            args.config_file = fs::path(config_env);
+            args.config_file = std::filesystem::path(config_env);
         }
 
         const char* db_url = std::getenv("GAME_DB_URL");
