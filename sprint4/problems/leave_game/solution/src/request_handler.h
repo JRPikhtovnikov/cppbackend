@@ -1319,7 +1319,7 @@ private:
             if (player.IsRetired()) continue;
             if (player.GetSpeed().x == 0.0 && player.GetSpeed().y == 0.0) {
                 player.AddIdleTime(delta);
-                if (player.GetIdleTime() > std::chrono::milliseconds(static_cast<int>(dog_retirement_time_ * 1000))) {
+                if (player.GetIdleTime() >= std::chrono::milliseconds(static_cast<int>(dog_retirement_time_ * 1000))) {
                     to_retire.push_back(pid);
                 }
             } else {
