@@ -348,19 +348,20 @@ private:
             boost::beast::string_view query = target.substr(query_pos + 1);
 
             auto parse_param = [&](boost::beast::string_view name) -> std::optional<size_t> {
-                auto pos = query.find(name);
-                if (pos == boost::beast::string_view::npos) return std::nullopt;
-                auto eq = query.find('=', pos);
-                if (eq == boost::beast::string_view::npos) return std::nullopt;
-                auto val_start = eq + 1;
-                auto val_end = query.find('&', val_start);
-                if (val_end == boost::beast::string_view::npos) val_end = query.size();
-                boost::beast::string_view val_str = query.substr(val_start, val_end - val_start);
-                char* end;
-                long long v = std::strtoll(std::string(val_str).c_str(), &end, 10);
-                if (end == val_str.data() || v < 0) return std::nullopt;
-                return static_cast<size_t>(v);
-            };
+            auto pos = query.find(name);
+            if (pos == boost::beast::string_view::npos) return std::nullopt;
+            auto eq = query.find('=', pos);
+            if (eq == boost::beast::string_view::npos) return std::nullopt;
+            auto val_start = eq + 1;
+            auto val_end = query.find('&', val_start);
+            if (val_end == boost::beast::string_view::npos) val_end = query.size();
+            boost::beast::string_view val_str = query.substr(val_start, val_end - val_start);
+            std::string val_copy(val_str);             
+            char* end;
+            long long v = std::strtoll(val_copy.c_str(), &end, 10);
+            if (end == val_copy.c_str() || v < 0) return std::nullopt;
+            return static_cast<size_t>(v);
+        };
 
             if (auto s = parse_param("start")) start = *s;
             if (auto m = parse_param("maxItems")) {
@@ -1087,6 +1088,12 @@ private:
             old_positions[pid] = p.GetPos();
         }
 
+        for (auto& [pid, player] : players_.GetAllMutable()) {
+            if (!player.IsRetired()) {
+                player.AddPlayTime(delta);
+            }
+        }
+
         auto& all = players_.GetAllMutable();
         for (auto& [pid, p] : all) {
             const auto* session = sessions_.Find(p.GetSessionId());
@@ -1304,28 +1311,27 @@ private:
                         }
                     }
                 }
-            } catch (...) {
-            }
+            } catch (...) {}
+        }
 
-            std::vector<model::Player::Id> to_retire;
-            for (auto& [pid, player] : players_.GetAllMutable()) {
-                if (player.IsRetired()) continue;
-
-                if (player.GetSpeed().x == 0.0 && player.GetSpeed().y == 0.0) {
-                    player.AddIdleTime(std::chrono::milliseconds(time_delta_ms));
-                } else {
-                    player.ResetIdleTime();
-                    player.AddIdleTime(std::chrono::milliseconds(0));
-                }
-
+        std::vector<model::Player::Id> to_retire;
+        for (auto& [pid, player] : players_.GetAllMutable()) {
+            if (player.IsRetired()) continue;
+            if (player.GetSpeed().x == 0.0 && player.GetSpeed().y == 0.0) {
+                player.AddIdleTime(delta);
                 if (player.GetIdleTime() > std::chrono::milliseconds(static_cast<int>(dog_retirement_time_ * 1000))) {
-                    RetirePlayer(pid);
+                    to_retire.push_back(pid);
                 }
+            } else {
+                player.ResetIdleTime();
             }
+        }
+        for (auto pid : to_retire) {
+            RetirePlayer(pid);
         }
 
         if (save_state_period_) {
-            time_since_last_save_ += std::chrono::milliseconds(time_delta_ms);
+            time_since_last_save_ += delta;
             if (time_since_last_save_ >= *save_state_period_) {
                 TrySaveState();
                 time_since_last_save_ = std::chrono::milliseconds::zero();

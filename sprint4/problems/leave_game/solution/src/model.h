@@ -438,6 +438,9 @@ public:
 
     void AddIdleTime(std::chrono::milliseconds delta) {
         idle_time_ += delta;
+    }
+
+    void AddPlayTime(std::chrono::milliseconds delta) {
         total_play_time_ += delta;
     }
 
