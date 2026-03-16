@@ -13,6 +13,9 @@
 #include <cstdint>
 #include "tagged.h"
 
+#include <boost/log/trivial.hpp>
+
+
 namespace model {
 
 using Dimension = int;
@@ -527,14 +530,17 @@ public:
     }
 
     void Add(Token token, Player::Id player_id) {
+        BOOST_LOG_TRIVIAL(info) << "Adding token for player " << player_id << ": " << *token;
         token_to_player_.emplace(std::move(token), player_id);
     }
 
     std::optional<Player::Id> FindPlayerIdByToken(const Token& token) const {
-        if (auto it = token_to_player_.find(token); it != token_to_player_.end()) {
-            return it->second;
+        auto it = token_to_player_.find(token);
+        if (it == token_to_player_.end()) {
+            BOOST_LOG_TRIVIAL(warning) << "Token not found in map: " << *token;
+            return std::nullopt;
         }
-        return std::nullopt;
+        return it->second;
     }
 
     const std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>>& GetAllTokens() const noexcept {
@@ -542,8 +548,10 @@ public:
     }
 
     void RemoveByPlayerId(Player::Id player_id) {
+        BOOST_LOG_TRIVIAL(info) << "Removing token for player " << player_id;
         for (auto it = token_to_player_.begin(); it != token_to_player_.end(); ) {
             if (it->second == player_id) {
+                BOOST_LOG_TRIVIAL(info) << "Erasing token: " << *it->first;
                 it = token_to_player_.erase(it);
             } else {
                 ++it;

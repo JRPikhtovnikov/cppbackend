@@ -747,18 +747,21 @@ private:
         const model::Token token{token_str};
         const auto player_id_opt = tokens_.FindPlayerIdByToken(token);
         if (!player_id_opt) {
+            BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
             return send(MakeError(http::status::unauthorized, req,
                                 "unknownToken", "Player token has not been found"));
         }
 
         const model::Player* me = players_.Find(*player_id_opt);
         if (!me) {
+            BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
             return send(MakeError(http::status::unauthorized, req,
                                 "unknownToken", "Player token has not been found"));
         }
 
         const model::GameSession* session = sessions_.Find(me->GetSessionId());
         if (!session) {
+            BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
             return send(MakeError(http::status::unauthorized, req,
                                 "unknownToken", "Player token has not been found"));
         }
@@ -817,6 +820,7 @@ private:
         auto response = ExecuteAuthorized(req, [&](const model::Token& token) {
             const auto pid_opt = tokens_.FindPlayerIdByToken(token);
             if (!pid_opt) {
+                BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
                 return MakeError(http::status::unauthorized, req, "unknownToken", "Player token has not been found");
             }
 
