@@ -519,21 +519,7 @@ public:
 
     void Clear() {
         token_to_player_.clear();
-    }
-
-    void Add(Token token, Player::Id player_id) {
-        token_to_player_.emplace(std::move(token), player_id);
-    }
-
-    std::optional<Player::Id> FindPlayerIdByToken(const Token& token) const {
-        if (auto it = token_to_player_.find(token); it != token_to_player_.end()) {
-            return it->second;
-        }
-        return std::nullopt;
-    }
-
-    const std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>>& GetAllTokens() const noexcept {
-        return token_to_player_;
+        player_to_token_.clear();
     }
 
     void Add(Token token, Player::Id player_id) {
@@ -549,6 +535,17 @@ public:
         }
     }
 
+    std::optional<Player::Id> FindPlayerIdByToken(const Token& token) const {
+        if (auto it = token_to_player_.find(token); it != token_to_player_.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+
+    const std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>>& GetAllTokens() const noexcept {
+        return token_to_player_;
+    }
+
 private:
     std::random_device random_device_;
     std::mt19937_64 generator1_{[this] {
@@ -561,9 +558,7 @@ private:
     }()};
 
     std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>> token_to_player_;
-
-    std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>> token_to_player_;
-    std::unordered_map<Player::Id, Token> player_to_token_;
+    std::unordered_map<Player::Id, Token> player_to_token_; // обратное отображение
 };
 
 }  // namespace model
