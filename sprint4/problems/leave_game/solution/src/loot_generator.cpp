@@ -11,6 +11,7 @@ unsigned LootGenerator::Generate(TimeInterval time_delta, unsigned loot_count,
     time_without_loot_ += time_delta;
     const unsigned loot_shortage = loot_count > looter_count ? 0u : looter_count - loot_count;
 
+    // Если вероятность 1, всегда генерируем все недостающие предметы
     if (probability_ == 1.0) {
         if (loot_shortage > 0) {
             time_without_loot_ = {};
@@ -19,6 +20,7 @@ unsigned LootGenerator::Generate(TimeInterval time_delta, unsigned loot_count,
         return 0;
     }
 
+    // Базовая формула для probability_ < 1.0
     const double ratio = std::chrono::duration<double>{time_without_loot_} / base_interval_;
     const double probability
         = std::clamp((1.0 - std::pow(1.0 - probability_, ratio)) * random_generator_(), 0.0, 1.0);

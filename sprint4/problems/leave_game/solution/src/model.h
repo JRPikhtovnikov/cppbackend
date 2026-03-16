@@ -13,9 +13,6 @@
 #include <cstdint>
 #include "tagged.h"
 
-#include <boost/log/trivial.hpp>
-
-
 namespace model {
 
 using Dimension = int;
@@ -328,11 +325,11 @@ public:
 
     void RemovePlayer(PlayerId pid) {
         auto it = std::find(player_ids_.begin(), player_ids_.end(), pid);
-        if (it != player_ids_.end()) {
+        if (it != player_ids_.end())
             player_ids_.erase(it);
-        }
     }
 
+    
 private:
     SessionId id_;
     Map::Id map_id_;
@@ -436,26 +433,22 @@ public:
     void ClearBag() noexcept { bag_.clear(); }
 
     int GetScore() const noexcept { return score_; }
-
     void AddScore(int points) noexcept { score_ += points; }
 
-    void AddIdleTime(std::chrono::milliseconds delta) {
-        idle_time_ += delta;
+    void AddIdleTime(std::chrono::milliseconds delta) noexcept {
+        if (speed_.x == 0.0 && speed_.y == 0.0)
+            idle_time_ += delta;
+        else
+            idle_time_ = std::chrono::milliseconds::zero();
     }
 
-    void AddPlayTime(std::chrono::milliseconds delta) {
+    void AddPlayTime(std::chrono::milliseconds delta) noexcept {
         total_play_time_ += delta;
     }
 
-    void ResetIdleTime() {
-        idle_time_ = std::chrono::milliseconds::zero();
-    }
-
-    std::chrono::milliseconds GetIdleTime() const { return idle_time_; }
-    std::chrono::milliseconds GetTotalPlayTime() const { return total_play_time_; }
-
-    void SetRetired(bool retired) { retired_ = retired; }
-    bool IsRetired() const { return retired_; }
+    std::chrono::milliseconds GetIdleTime() const noexcept { return idle_time_; }
+    std::chrono::milliseconds GetTotalPlayTime() const noexcept { return total_play_time_; }
+    void SetTotalPlayTime(std::chrono::milliseconds t) noexcept { total_play_time_ = t; }
 
 private:
     Id id_;
@@ -473,7 +466,6 @@ private:
 
     std::chrono::milliseconds idle_time_{0};
     std::chrono::milliseconds total_play_time_{0};
-    bool retired_ = false;
 };
 
 
@@ -530,32 +522,30 @@ public:
     }
 
     void Add(Token token, Player::Id player_id) {
-        BOOST_LOG_TRIVIAL(info) << "Adding token for player " << player_id << ": " << *token;
         token_to_player_.emplace(std::move(token), player_id);
     }
 
     std::optional<Player::Id> FindPlayerIdByToken(const Token& token) const {
-        auto it = token_to_player_.find(token);
-        if (it == token_to_player_.end()) {
-            BOOST_LOG_TRIVIAL(warning) << "Token not found in map: " << *token;
-            return std::nullopt;
+        if (auto it = token_to_player_.find(token); it != token_to_player_.end()) {
+            return it->second;
         }
-        return it->second;
+        return std::nullopt;
     }
 
     const std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>>& GetAllTokens() const noexcept {
         return token_to_player_;
     }
 
-    void RemoveByPlayerId(Player::Id player_id) {
-        BOOST_LOG_TRIVIAL(info) << "Removing token for player " << player_id;
-        for (auto it = token_to_player_.begin(); it != token_to_player_.end(); ) {
-            if (it->second == player_id) {
-                BOOST_LOG_TRIVIAL(info) << "Erasing token: " << *it->first;
-                it = token_to_player_.erase(it);
-            } else {
-                ++it;
-            }
+    void Add(Token token, Player::Id player_id) {
+        token_to_player_.emplace(token, player_id);
+        player_to_token_.emplace(player_id, std::move(token));
+    }
+
+    void RemovePlayer(Player::Id player_id) {
+        auto it = player_to_token_.find(player_id);
+        if (it != player_to_token_.end()) {
+            token_to_player_.erase(it->second);
+            player_to_token_.erase(it);
         }
     }
 
@@ -571,6 +561,9 @@ private:
     }()};
 
     std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>> token_to_player_;
+
+    std::unordered_map<Token, Player::Id, util::TaggedHasher<Token>> token_to_player_;
+    std::unordered_map<Player::Id, Token> player_to_token_;
 };
 
 }  // namespace model

@@ -97,28 +97,14 @@ int main(int argc, const char* argv[]) {
     try {
         auto parsed = ParseCommandLine(argc, argv);
         if (!parsed) {
-            return EXIT_SUCCESS;
+            return EXIT_SUCCESS; // help printed
         }
-        auto& args = *parsed;
-
-        const char* config_env = std::getenv("CONFIG_PATH");
-        if (config_env) {
-            args.config_file = std::filesystem::path(config_env);
-        }
+        const auto& args = *parsed;
 
         const char* db_url = std::getenv("GAME_DB_URL");
         if (!db_url) {
             throw std::runtime_error("GAME_DB_URL environment variable not set");
         }
-
-        const unsigned num_threads = std::thread::hardware_concurrency();
-        db::ConnectionPool conn_pool(num_threads, [db_url] {
-            return std::make_shared<pqxx::connection>(db_url);
-        });
-
-        db::Database db(conn_pool);
-        db.Initialize();
-        BOOST_LOG_TRIVIAL(info) << "Database initialized successfully";
 
         const auto address = net::ip::make_address("0.0.0.0");
         constexpr net::ip::port_type port = 8080;
@@ -127,6 +113,7 @@ int main(int argc, const char* argv[]) {
             throw std::runtime_error("Static directory does not exist: " + fs::absolute(args.www_root).string());
         }
 
+        const unsigned num_threads = std::thread::hardware_concurrency();
         net::io_context ioc(std::max(1u, num_threads));
 
         net::signal_set signals(ioc, SIGINT, SIGTERM);
@@ -139,10 +126,10 @@ int main(int argc, const char* argv[]) {
         const bool realtime = args.tick_period_ms.has_value();
         const bool manual_tick_enabled = !realtime;
 
-        double dog_retirement_time = 60.0;
         json_loader::LootTypesMap loot_types_map;
         json_loader::LootValuesMap loot_values_map;
         double loot_period = 0.0, loot_probability = 0.0;
+        double dog_retirement_time;
         model::Game game = json_loader::LoadGame(args.config_file, loot_types_map, loot_values_map, loot_period, loot_probability, dog_retirement_time);
         auto handler = std::make_shared<http_handler::RequestHandler>(
             game, api_strand, args.www_root,
@@ -152,7 +139,8 @@ int main(int argc, const char* argv[]) {
             loot_period, loot_probability,
             args.state_file,                                         
             args.save_state_period_ms ? std::optional(std::chrono::milliseconds(*args.save_state_period_ms)) : std::nullopt,
-            db, dog_retirement_time
+            dog_retirement_time,
+            db_url
         );
 
         if (args.state_file) {
@@ -168,6 +156,7 @@ int main(int argc, const char* argv[]) {
 
         http_server::ServeHttp(ioc, {address, port}, logging_handler);
 
+        // realtime: запускаем таймерный тикер
         std::shared_ptr<Ticker> ticker;
         if (realtime) {
             ticker = std::make_shared<Ticker>(

@@ -14,6 +14,7 @@
 #include <vector>
 
 namespace geom{
+    // Сериализация геометрических типов
     template <typename Archive>
     void serialize(Archive& ar, Point2D& p, [[maybe_unused]] const unsigned int version) {
         ar & p.x & p.y;
@@ -49,13 +50,15 @@ struct PlayerRepr {
     int score = 0;
     size_t bag_capacity = 0;
     std::vector<model::BagItem> bag;   
+    int64_t play_time_ms = 0; 
 
     template <typename Archive>
     void serialize(Archive& ar, [[maybe_unused]] const unsigned int version) {
-        ar & id & name & session_id & pos & speed & dir & score & bag_capacity & bag;
+        ar & id & name & session_id & pos & speed & dir & score & bag_capacity & bag & play_time_ms;
     }
 };
 
+// Вспомогательная структура для токена
 struct TokenRepr {
     std::string token;
     uint32_t player_id = 0;
@@ -66,6 +69,7 @@ struct TokenRepr {
     }
 };
 
+// Вспомогательная структура для игровой сессии
 struct SessionRepr {
     uint32_t id = 0;
     std::string map_id;
@@ -80,6 +84,7 @@ struct SessionRepr {
     }
 };
 
+// Корневая структура состояния игры
 struct GameStateRepr {
     uint32_t next_player_id = 0;
     uint32_t next_session_id = 0;

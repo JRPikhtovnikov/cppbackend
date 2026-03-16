@@ -40,6 +40,7 @@ constexpr string_view ACTION      = "/api/v1/game/player/action";
 constexpr string_view TICK        = "/api/v1/game/tick";
 
 constexpr string_view RECORDS     = "/api/v1/game/records";
+
 }  // namespace api
 
 namespace http_handler {
@@ -81,8 +82,8 @@ public:
                    double loot_probability,
                    std::optional<std::filesystem::path> state_file,
                    std::optional<std::chrono::milliseconds> save_state_period,
-                   db::Database& db, 
-                   double dog_retirement_time)
+                   double dog_retirement_time, 
+                   const std::string& db_url)
         : game_{game}
         , static_handler_(static_path)
         , api_strand_{std::move(api_strand)}
@@ -95,8 +96,8 @@ public:
         , gen_{rd_()}
         , state_file_path_(std::move(state_file))
         , save_state_period_(save_state_period)
-        , db_(db)
-        , dog_retirement_time_(dog_retirement_time){}
+        , dog_retirement_time_ms_(static_cast<int64_t>(dog_retirement_time * 1000))
+        , db_(std::make_unique<Database>(db_url)){}
 
     RequestHandler(const RequestHandler&) = delete;
     RequestHandler& operator=(const RequestHandler&) = delete;
@@ -122,34 +123,6 @@ public:
         return oss.str();
     }
 
-    void RetirePlayer(model::Player::Id player_id){
-        auto* player = players_.FindMutable(player_id);
-        if (!player || player->IsRetired()) return;
-
-        db::RetiredPlayerRecord record{
-            .name = player->GetName(),
-            .score = player->GetScore(),
-            .play_time = player->GetTotalPlayTime()
-        };
-
-        try {
-            db_.InsertRetiredPlayer(record);
-        } catch (const std::exception& e) {
-            BOOST_LOG_TRIVIAL(error) << "Failed to insert retired player: " << e.what();
-        }
-
-        auto* session = sessions_.Find(player->GetSessionId());
-        if (session) {
-            session->RemovePlayer(player_id);
-        }
-
-        tokens_.RemoveByPlayerId(player_id);
-
-        player->SetRetired(true);
-        BOOST_LOG_TRIVIAL(info) << "Retiring player " << player_id << " due to idle timeout";
-        players_.GetAllMutable().erase(player_id);
-    }
-
     void SetRandomGeneratorState(const std::string& state) {
         std::istringstream iss(state);
         iss >> gen_;
@@ -168,54 +141,77 @@ public:
             serialization::GameStateRepr repr;
             ia >> repr;
 
+            // Проверяем существование всех карт для сессий
             for (const auto& srep : repr.sessions) {
                 if (!game_.FindMap(model::Map::Id(srep.map_id))) {
                     throw std::runtime_error("Map not found for session: " + srep.map_id);
                 }
             }
 
+            // Сбрасываем текущее состояние
             players_ = model::Players();
             tokens_.Clear();
             sessions_ = model::GameSessions();
             next_player_id_ = repr.next_player_id;
             sessions_.SetNextSessionId(repr.next_session_id);
 
+            // Восстанавливаем сессии
             for (const auto& srep : repr.sessions) {
                 auto& session = sessions_.CreateSessionWithId(
-                    srep.id,                                   
+                    srep.id,
                     model::Map::Id(srep.map_id),
-                    loot_period_, loot_probability_
+                    loot_period_,
+                    loot_probability_
                 );
-                session.SetNextLootId(srep.next_loot_id);
                 
+                session.SetNextLootId(srep.next_loot_id);
                 session.SetLootEngineState(srep.loot_engine_state);
                 
+                // Восстанавливаем игроков сессии
                 for (auto pid : srep.player_ids) {
                     session.AddPlayer(pid);
                 }
                 
+                // Восстанавливаем предметы лута
                 std::unordered_map<uint32_t, model::LostObject> loot_objects;
                 for (const auto& lrep : srep.loot_objects) {
                     model::Vec2 pos;
                     pos.x = lrep.pos.x;
                     pos.y = lrep.pos.y;
-                    loot_objects[lrep.id] = {lrep.id, lrep.type, lrep.value, pos};
+                    loot_objects[lrep.id] = {
+                        lrep.id, 
+                        lrep.type, 
+                        lrep.value, 
+                        pos
+                    };
                 }
                 session.SetLootObjects(std::move(loot_objects));
             }
 
+            // Восстанавливаем игроков
             for (const auto& prep : repr.players) {
                 model::Vec2 pos;
                 pos.x = prep.pos.x;
                 pos.y = prep.pos.y;
-                auto& player = players_.Add(prep.id, prep.name, prep.session_id, pos);
                 
+                auto& player = players_.Add(
+                    prep.id, 
+                    prep.name, 
+                    prep.session_id, 
+                    pos
+                );
+                
+                // Восстанавливаем время игры
+                player.SetTotalPlayTime(std::chrono::milliseconds(prep.play_time_ms));
+                
+                // Восстанавливаем скорость и направление
                 model::Vec2 speed;
                 speed.x = prep.speed.x;
                 speed.y = prep.speed.y;
                 player.SetSpeed(speed);
-                
                 player.SetDir(static_cast<model::Direction>(prep.dir));
+                
+                // Восстанавливаем счет и рюкзак
                 player.AddScore(prep.score);
                 player.SetBagCapacity(prep.bag_capacity);
                 for (const auto& item : prep.bag) {
@@ -223,13 +219,19 @@ public:
                 }
             }
 
+            // Восстанавливаем токены
             for (const auto& trep : repr.tokens) {
                 tokens_.Add(model::Token(trep.token), trep.player_id);
             }
 
-            SetRandomGeneratorState(repr.random_generator_state); 
-        
+            // Восстанавливаем состояние генератора случайных чисел
+            SetRandomGeneratorState(repr.random_generator_state);
+            
+            // Сбрасываем таймер сохранения
             time_since_last_save_ = std::chrono::milliseconds::zero();
+            
+            BOOST_LOG_TRIVIAL(info) << "Game state loaded successfully from " << state_file_path_->string();
+            
         } catch (const std::exception& e) {
             throw std::runtime_error("Failed to load state: " + std::string(e.what()));
         }
@@ -241,11 +243,13 @@ public:
 
         serialization::GameStateRepr repr;
         repr.next_player_id = next_player_id_;
-        repr.next_session_id = sessions_.GetNextSessionId(); 
+        repr.next_session_id = sessions_.GetNextSessionId();
         repr.random_generator_state = GetRandomGeneratorState();
         
+        // Сохраняем сессии
         for (const auto& [sid, session_ptr] : sessions_.GetAllSessions()) {
             const auto& session = *session_ptr;
+            
             serialization::SessionRepr srep;
             srep.id = session.GetId();
             srep.map_id = *session.GetMapId();
@@ -253,6 +257,7 @@ public:
             srep.player_ids = session.GetPlayers();
             srep.loot_engine_state = session.GetLootEngineState();
             
+            // Сохраняем предметы лута
             for (const auto& [lid, obj] : session.GetLootObjects()) {
                 serialization::LostObjectRepr lrep;
                 lrep.id = obj.id;
@@ -262,9 +267,11 @@ public:
                 lrep.pos.y = obj.pos.y;
                 srep.loot_objects.push_back(lrep);
             }
+            
             repr.sessions.push_back(srep);
         }
 
+        // Сохраняем игроков
         for (const auto& [pid, player] : players_.GetAll()) {
             serialization::PlayerRepr prep;
             prep.id = player.GetId();
@@ -281,24 +288,39 @@ public:
             prep.score = player.GetScore();
             prep.bag_capacity = player.GetBagCapacity();
             prep.bag = player.GetBag();
+            prep.play_time_ms = player.GetTotalPlayTime().count(); // Важно: добавляем время игры
+            
             repr.players.push_back(prep);
         }
 
+        // Сохраняем токены
         for (const auto& [token, pid] : tokens_.GetAllTokens()) {
             repr.tokens.push_back({*token, pid});
         }
-
+        
+        // Сохраняем во временный файл, затем переименовываем
         auto tmp_path = *state_file_path_;
         tmp_path += ".tmp";
+        
         {
             std::ofstream ofs(tmp_path.string());
-            if (!ofs.is_open())
+            if (!ofs.is_open()) {
                 throw std::runtime_error("Cannot open temporary file for writing: " + tmp_path.string());
+            }
             
             boost::archive::text_oarchive oa(ofs);
             oa << repr;
+            
+            ofs.flush();
+            if (!ofs.good()) {
+                throw std::runtime_error("Failed to write state to temporary file");
+            }
         }
+        
+        // Атомарно заменяем старый файл новым
         std::filesystem::rename(tmp_path, *state_file_path_);
+        
+        BOOST_LOG_TRIVIAL(debug) << "Game state saved to " << state_file_path_->string();
     }
 
 
@@ -327,86 +349,10 @@ private:
     std::optional<std::chrono::milliseconds> save_state_period_;
     mutable std::chrono::milliseconds time_since_last_save_{0};
 
-    db::Database& db_;
-    double dog_retirement_time_;
+    std::chrono::milliseconds dog_retirement_time_ms_;
+    std::unique_ptr<Database> db_;
 
 private:
-    template <typename Body, typename Allocator, typename Send>
-    void HandleRecords(const http::request<Body, http::basic_fields<Allocator>>& req, Send&& send){
-        BOOST_LOG_TRIVIAL(info) << "HandleRecords called with target: " << req.target();
-
-        if (req.method() != http::verb::get && req.method() != http::verb::head) {
-            auto resp = MakeError(http::status::method_not_allowed, req,
-                                "invalidMethod", "Only GET and HEAD methods are allowed");
-            resp.set(http::field::allow, "GET, HEAD");
-            return send(std::move(resp));
-        }
-
-        size_t start = 0;
-        size_t max_items = 100;
-
-        auto target = req.target();
-        auto query_pos = target.find('?');
-        if (query_pos != boost::beast::string_view::npos) {
-            boost::beast::string_view query = target.substr(query_pos + 1);
-            BOOST_LOG_TRIVIAL(info) << "Query string: " << query;
-
-            auto parse_param = [&](boost::beast::string_view name) -> std::optional<size_t> {
-                auto pos = query.find(name);
-                if (pos == boost::beast::string_view::npos) return std::nullopt;
-                auto eq = query.find('=', pos);
-                if (eq == boost::beast::string_view::npos) return std::nullopt;
-                auto val_start = eq + 1;
-                auto val_end = query.find('&', val_start);
-                if (val_end == boost::beast::string_view::npos) val_end = query.size();
-                boost::beast::string_view val_str = query.substr(val_start, val_end - val_start);
-                std::string val_copy(val_str);
-                char* end;
-                long long v = std::strtoll(val_copy.c_str(), &end, 10);
-                if (end == val_copy.c_str() || v < 0) {
-                    BOOST_LOG_TRIVIAL(warning) << "Failed to parse parameter " << name << " value: " << val_str;
-                    return std::nullopt;
-                }
-                BOOST_LOG_TRIVIAL(debug) << "Parsed " << name << " = " << v;
-                return static_cast<size_t>(v);
-            };
-
-            if (auto s = parse_param("start")) start = *s;
-            if (auto m = parse_param("maxItems")) {
-                if (*m > 100) {
-                    BOOST_LOG_TRIVIAL(warning) << "maxItems exceeds 100: " << *m;
-                    return send(MakeError(http::status::bad_request, req,
-                                        "invalidArgument", "maxItems must not exceed 100"));
-                }
-                max_items = *m;
-            }
-        }
-
-        BOOST_LOG_TRIVIAL(info) << "Records request: start=" << start << ", max_items=" << max_items;
-
-        std::vector<db::RetiredPlayerRecord> records;
-        try {
-            records = db_.GetRecords(start, max_items);
-            BOOST_LOG_TRIVIAL(info) << "GetRecords returned " << records.size() << " records";
-        } catch (const std::exception& e) {
-            BOOST_LOG_TRIVIAL(error) << "Failed to get records: " << e.what();
-            return send(MakeError(http::status::internal_server_error, req,
-                                "internalError", "Database error"));
-        }
-
-        json::array result;
-        for (const auto& rec : records) {
-            json::object obj;
-            obj["name"] = rec.name;
-            obj["score"] = rec.score;
-            obj["playTime"] = static_cast<double>(rec.play_time.count()) / 1000.0;
-            result.push_back(std::move(obj));
-        }
-
-        BOOST_LOG_TRIVIAL(info) << "Sending " << result.size() << " records";
-        send(MakeJsonResponse(http::status::ok, req, result));
-    }
-
     void TrySaveState() {
         try {
             SaveState();
@@ -569,11 +515,68 @@ private:
             return HandleTick(std::forward<decltype(req)>(req), std::forward<Send>(send));
         }
 
-        if (target.starts_with(api::RECORDS) || target == (std::string(api::RECORDS) + "/")) {
-            return HandleRecords(std::forward<decltype(req)>(req), std::forward<Send>(send));
+        if (target == api::RECORDS) {
+            return HandleRecords(req, std::forward<Send>(send));
         }
 
         return send(MakeError(http::status::bad_request, req, "badRequest", "Invalid endpoint"));
+    }
+
+    template <typename Body, typename Allocator, typename Send>
+    void HandleRecords(const http::request<Body, http::basic_fields<Allocator>>& req, Send&& send) {
+        if (req.method() != http::verb::get) {
+            auto resp = MakeError(http::status::method_not_allowed, req,
+                                "invalidMethod", "Only GET method allowed");
+            resp.set(http::field::allow, "GET");
+            return send(std::move(resp));
+        }
+
+        int start = 0;
+        int max_items = 100;
+
+        // Разбор query-параметров
+        std::string_view target = req.target();
+        auto pos = target.find('?');
+        if (pos != std::string_view::npos) {
+            std::string_view query = target.substr(pos + 1);
+            // упрощённый парсинг (можно использовать boost::urls или вручную)
+            auto parse_param = [&](std::string_view name, int& value) {
+                auto start_pos = query.find(name);
+                if (start_pos != std::string_view::npos) {
+                    auto eq_pos = query.find('=', start_pos);
+                    if (eq_pos != std::string_view::npos) {
+                        auto end_pos = query.find('&', eq_pos + 1);
+                        std::string_view sv = query.substr(eq_pos + 1, end_pos - eq_pos - 1);
+                        try {
+                            value = std::stoi(std::string(sv));
+                        } catch (...) {}
+                    }
+                }
+            };
+            parse_param("start", start);
+            parse_param("maxItems", max_items);
+        }
+
+        if (max_items > 100) {
+            return send(MakeError(http::status::bad_request, req,
+                                "invalidArgument", "maxItems must not exceed 100"));
+        }
+        if (start < 0) {
+            return send(MakeError(http::status::bad_request, req,
+                                "invalidArgument", "start must be non-negative"));
+        }
+
+        auto records = db_->GetRecords(start, max_items);
+        json::array arr;
+        for (const auto& rec : records) {
+            json::object obj;
+            obj["name"] = rec.name;
+            obj["score"] = rec.score;
+            obj["playTime"] = rec.play_time;
+            arr.push_back(std::move(obj));
+        }
+
+        send(MakeJsonResponse(http::status::ok, req, std::move(arr)));
     }
 
     template <typename Body, typename Allocator, typename Send>
@@ -747,21 +750,18 @@ private:
         const model::Token token{token_str};
         const auto player_id_opt = tokens_.FindPlayerIdByToken(token);
         if (!player_id_opt) {
-            BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
             return send(MakeError(http::status::unauthorized, req,
                                 "unknownToken", "Player token has not been found"));
         }
 
         const model::Player* me = players_.Find(*player_id_opt);
         if (!me) {
-            BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
             return send(MakeError(http::status::unauthorized, req,
                                 "unknownToken", "Player token has not been found"));
         }
 
         const model::GameSession* session = sessions_.Find(me->GetSessionId());
         if (!session) {
-            BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
             return send(MakeError(http::status::unauthorized, req,
                                 "unknownToken", "Player token has not been found"));
         }
@@ -820,7 +820,6 @@ private:
         auto response = ExecuteAuthorized(req, [&](const model::Token& token) {
             const auto pid_opt = tokens_.FindPlayerIdByToken(token);
             if (!pid_opt) {
-                BOOST_LOG_TRIVIAL(warning) << "Token not found in HandleAction: " << *token;
                 return MakeError(http::status::unauthorized, req, "unknownToken", "Player token has not been found");
             }
 
@@ -1088,6 +1087,7 @@ private:
             return {xdist(gen_), static_cast<double>(s.y)};
         }
         
+        // Вертикальная дорога
         const auto y0 = std::min(s.y, e.y);
         const auto y1 = std::max(s.y, e.y);
         std::uniform_real_distribution<double> ydist(static_cast<double>(y0), static_cast<double>(y1));
@@ -1096,73 +1096,126 @@ private:
 
     void AdvanceGameTime(std::int64_t time_delta_ms) {
         if (time_delta_ms <= 0) return;
-
+        
+        const auto delta = std::chrono::milliseconds(time_delta_ms);
         const double dt = static_cast<double>(time_delta_ms) / 1000.0;
-        const std::chrono::milliseconds delta(time_delta_ms);
+        std::vector<model::Player::Id> to_remove;
 
+        // Сохраняем старые позиции для детектора коллизий
         std::unordered_map<model::Player::Id, model::Vec2> old_positions;
         for (const auto& [pid, p] : players_.GetAll()) {
             old_positions[pid] = p.GetPos();
         }
 
-        for (auto& [pid, player] : players_.GetAllMutable()) {
-            if (!player.IsRetired()) {
-                player.AddPlayTime(delta);
-            }
-        }
-
-        auto& all = players_.GetAllMutable();
-        for (auto& [pid, p] : all) {
-            const auto* session = sessions_.Find(p.GetSessionId());
+        // Обновляем позиции и отслеживаем бездействие
+        auto& all_players = players_.GetAllMutable();
+        for (auto& [pid, player] : all_players) {
+            const auto* session = sessions_.Find(player.GetSessionId());
             if (!session) continue;
             const auto* map = game_.FindMap(session->GetMapId());
             if (!map) continue;
 
-            const auto v = p.GetSpeed();
-            if (v.x == 0.0 && v.y == 0.0) continue;
+            // Обновляем игровое время и время бездействия
+            player.AddPlayTime(delta);
+            player.AddIdleTime(delta);
 
-            auto pos = p.GetPos();
+            const auto speed = player.GetSpeed();
+            
+            // Если игрок стоит, только проверяем время бездействия
+            if (speed.x == 0.0 && speed.y == 0.0) {
+                if (player.GetIdleTime() > dog_retirement_time_ms_) {
+                    to_remove.push_back(pid);
+                }
+                continue;
+            }
 
-            if (v.x != 0.0) {
-                const double dx = v.x * dt;
+            // Движение по оси X
+            auto pos = player.GetPos();
+            if (speed.x != 0.0) {
+                const double dx = speed.x * dt;
                 auto intervals = AllowedXIntervalsAtY(*map, pos.y);
                 const Interval* cur = FindContaining(intervals, pos.x);
+                
                 if (!cur) {
-                    p.SetSpeed({0.0, 0.0});
+                    player.SetSpeed({0.0, 0.0});
                     continue;
                 }
 
                 double new_x = pos.x + dx;
                 if (dx > 0.0 && new_x > cur->b) {
                     new_x = cur->b;
-                    p.SetSpeed({0.0, 0.0});
+                    player.SetSpeed({0.0, 0.0});
                 } else if (dx < 0.0 && new_x < cur->a) {
                     new_x = cur->a;
-                    p.SetSpeed({0.0, 0.0});
+                    player.SetSpeed({0.0, 0.0});
                 }
                 pos.x = new_x;
-            } else if (v.y != 0.0) {
-                const double dy = v.y * dt;
+            }
+            // Движение по оси Y
+            else if (speed.y != 0.0) {
+                const double dy = speed.y * dt;
                 auto intervals = AllowedYIntervalsAtX(*map, pos.x);
                 const Interval* cur = FindContaining(intervals, pos.y);
+                
                 if (!cur) {
-                    p.SetSpeed({0.0, 0.0});
+                    player.SetSpeed({0.0, 0.0});
                     continue;
                 }
 
                 double new_y = pos.y + dy;
                 if (dy > 0.0 && new_y > cur->b) {
                     new_y = cur->b;
-                    p.SetSpeed({0.0, 0.0});
+                    player.SetSpeed({0.0, 0.0});
                 } else if (dy < 0.0 && new_y < cur->a) {
                     new_y = cur->a;
-                    p.SetSpeed({0.0, 0.0});
+                    player.SetSpeed({0.0, 0.0});
                 }
                 pos.y = new_y;
             }
-            p.SetPos(pos);
+            
+            player.SetPos(pos);
+
+            // Проверяем бездействие после движения
+            if (player.GetIdleTime() > dog_retirement_time_ms_) {
+                to_remove.push_back(pid);
+            }
         }
 
+        // Удаляем накопившихся игроков (выход на пенсию)
+        for (auto pid : to_remove) {
+            auto& players_map = all_players;
+            auto it = players_map.find(pid);
+            if (it == players_map.end()) continue;
+            
+            // Копируем данные до удаления
+            auto name = it->second.GetName();
+            auto score = it->second.GetScore();
+            auto play_time_ms = it->second.GetTotalPlayTime().count();
+            auto session_id = it->second.GetSessionId();
+            
+            // Сохраняем в базу данных
+            try {
+                db_->SaveRetiredPlayer(name, score, play_time_ms);
+            } catch (const std::exception& e) {
+                BOOST_LOG_TRIVIAL(error) << "Failed to save retired player: " << e.what();
+            }
+            
+            // Удаляем из сессии
+            if (auto* session = sessions_.Find(session_id)) {
+                session->RemovePlayer(pid);
+            }
+            
+            // Удаляем токен
+            tokens_.RemovePlayer(pid);
+            
+            // Удаляем самого игрока
+            players_map.erase(it);
+            
+            BOOST_LOG_TRIVIAL(info) << "Player retired: " << name << ", score: " << score 
+                                    << ", play time: " << play_time_ms << "ms";
+        }
+
+        // Обработка коллизий (сбор лута и сдача в офисах)
         for (const auto& [sid, _] : sessions_.GetAllSessions()) {
             auto* session = sessions_.Find(sid);
             if (!session) continue;
@@ -1170,25 +1223,28 @@ private:
             const auto* map = game_.FindMap(session->GetMapId());
             if (!map) continue;
 
+            // Получаем стоимость лута для этой карты
             const auto& values_it = loot_values_map_.find(map->GetId());
             const std::vector<int>* loot_values = nullptr;
             if (values_it != loot_values_map_.end()) {
                 loot_values = &values_it->second;
             }
 
+            // Подготовка объектов для детектора коллизий
             struct CollisionObject {
                 bool is_office;
-                size_t office_idx;      // индекс офиса в карте
-                uint32_t loot_id;        // id потерянного предмета
-                int loot_type;            // тип предмета
-                int loot_value;           // стоимость предмета
+                size_t office_idx;
+                uint32_t loot_id;
+                int loot_type;
+                int loot_value;
                 geom::Point2D pos;
                 double width;
             };
+            
             std::vector<CollisionObject> objects;
-            std::vector<bool> alive;     
+            std::vector<bool> alive;
 
-            // Офисы (базы)
+            // Добавляем офисы (базы)
             const auto& offices = map->GetOffices();
             for (size_t i = 0; i < offices.size(); ++i) {
                 const auto& off = offices[i];
@@ -1200,11 +1256,12 @@ private:
                     .loot_value = 0,
                     .pos = {static_cast<double>(off.GetPosition().x),
                             static_cast<double>(off.GetPosition().y)},
-                    .width = 0.25  
+                    .width = 0.25
                 });
                 alive.push_back(true);
             }
 
+            // Добавляем предметы лута
             const auto& loot_map = session->GetLootObjects();
             for (const auto& [id, obj] : loot_map) {
                 objects.push_back(CollisionObject{
@@ -1214,37 +1271,41 @@ private:
                     .loot_type = obj.type,
                     .loot_value = obj.value,
                     .pos = {obj.pos.x, obj.pos.y},
-                    .width = 0.0 
+                    .width = 0.0
                 });
                 alive.push_back(true);
             }
 
+            // Подготовка сборщиков (игроков)
             struct GathererInfo {
                 model::Player::Id player_id;
                 geom::Point2D start;
                 geom::Point2D end;
                 double width;
             };
+            
             std::vector<GathererInfo> gatherers;
             std::vector<model::Player*> session_players;
 
-            for (auto pid : session->GetPlayers()) {
-                auto* p = players_.FindMutable(pid);
-                if (!p) continue;
-                auto old_it = old_positions.find(pid);
+            for (auto player_id : session->GetPlayers()) {
+                auto* player = players_.FindMutable(player_id);
+                if (!player) continue;
+                
+                auto old_it = old_positions.find(player_id);
                 if (old_it == old_positions.end()) continue;
 
-                session_players.push_back(p);
+                session_players.push_back(player);
                 gatherers.push_back(GathererInfo{
-                    .player_id = pid,
+                    .player_id = player_id,
                     .start = {old_it->second.x, old_it->second.y},
-                    .end = {p->GetPos().x, p->GetPos().y},
-                    .width = 0.3  
+                    .end = {player->GetPos().x, player->GetPos().y},
+                    .width = 0.3
                 });
             }
 
             if (gatherers.empty() || objects.empty()) continue;
 
+            // Провайдер для детектора коллизий
             class Provider : public collision_detector::ItemGathererProvider {
             public:
                 Provider(const std::vector<CollisionObject>& objs,
@@ -1252,13 +1313,16 @@ private:
                     : objects_(objs), gatherers_(gath) {}
 
                 size_t ItemsCount() const override { return objects_.size(); }
+                size_t GatherersCount() const override { return gatherers_.size(); }
+                
                 collision_detector::Item GetItem(size_t idx) const override {
                     return {objects_[idx].pos, objects_[idx].width};
                 }
-                size_t GatherersCount() const override { return gatherers_.size(); }
+                
                 collision_detector::Gatherer GetGatherer(size_t idx) const override {
                     return {gatherers_[idx].start, gatherers_[idx].end, gatherers_[idx].width};
                 }
+                
             private:
                 const std::vector<CollisionObject>& objects_;
                 const std::vector<GathererInfo>& gatherers_;
@@ -1267,14 +1331,16 @@ private:
             Provider provider(objects, gatherers);
             auto events = collision_detector::FindGatherEvents(provider);
 
+            // Обрабатываем события коллизий
             for (const auto& ev : events) {
-                if (!alive[ev.item_id]) continue; 
+                if (!alive[ev.item_id]) continue;
 
                 const auto& obj = objects[ev.item_id];
                 auto* player = session_players[ev.gatherer_id];
                 if (!player) continue;
 
                 if (obj.is_office) {
+                    // Сдача лута в офисе
                     if (!player->GetBag().empty()) {
                         int total_score = 0;
                         for (const auto& item : player->GetBag()) {
@@ -1282,8 +1348,11 @@ private:
                         }
                         player->AddScore(total_score);
                         player->ClearBag();
+                        BOOST_LOG_TRIVIAL(debug) << "Player " << player->GetName() 
+                                                << " delivered loot, +" << total_score << " score";
                     }
                 } else {
+                    // Подбор лута
                     if (player->GetBag().size() < player->GetBagCapacity()) {
                         int value = 0;
                         if (loot_values && obj.loot_type < static_cast<int>(loot_values->size())) {
@@ -1293,15 +1362,19 @@ private:
                         if (player->AddLoot(obj.loot_id, obj.loot_type, value)) {
                             session->RemoveLoot(obj.loot_id);
                             alive[ev.item_id] = false;
+                            BOOST_LOG_TRIVIAL(debug) << "Player " << player->GetName() 
+                                                    << " picked up loot type " << obj.loot_type;
                         }
                     }
                 }
             }
         }
 
+        // Генерация нового лута
         for (const auto& [sid, _] : sessions_.GetAllSessions()) {
             auto* session = sessions_.Find(sid);
             if (!session) continue;
+            
             const auto* map = game_.FindMap(session->GetMapId());
             if (!map) continue;
 
@@ -1326,32 +1399,26 @@ private:
                             model::Vec2 pos = RandomPointOnRoad(*map);
                             session->AddLoot(type, value, pos);
                         }
+                        
+                        BOOST_LOG_TRIVIAL(debug) << "Generated " << new_loot 
+                                                << " new loot items on map " << *map->GetId();
                     }
                 }
-            } catch (...) {}
-        }
-
-        std::vector<model::Player::Id> to_retire;
-        for (auto& [pid, player] : players_.GetAllMutable()) {
-            if (player.IsRetired()) continue;
-            if (player.GetSpeed().x == 0.0 && player.GetSpeed().y == 0.0) {
-                player.AddIdleTime(delta);
-                if (player.GetIdleTime() >= std::chrono::milliseconds(static_cast<int>(dog_retirement_time_ * 1000))) {
-                    to_retire.push_back(pid);
-                }
-            } else {
-                player.ResetIdleTime();
+            } catch (const std::exception& e) {
+                BOOST_LOG_TRIVIAL(error) << "Loot generation failed: " << e.what();
             }
         }
-        for (auto pid : to_retire) {
-            RetirePlayer(pid);
-        }
 
+        // Периодическое сохранение состояния
         if (save_state_period_) {
-            time_since_last_save_ += delta;
+            time_since_last_save_ += std::chrono::milliseconds(time_delta_ms);
             if (time_since_last_save_ >= *save_state_period_) {
-                TrySaveState();
-                time_since_last_save_ = std::chrono::milliseconds::zero();
+                try {
+                    SaveState();
+                    time_since_last_save_ = std::chrono::milliseconds::zero();
+                } catch (const std::exception& e) {
+                    BOOST_LOG_TRIVIAL(error) << "Periodic state save failed: " << e.what();
+                }
             }
         }
     }

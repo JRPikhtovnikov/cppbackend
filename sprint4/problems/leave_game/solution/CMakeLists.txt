@@ -42,7 +42,7 @@ target_link_libraries(game_lib PUBLIC
     CONAN_PKG::boost
     Threads::Threads
     CONAN_PKG::libpq 
-    CONAN_PKG::libpqxx
+    CONAN_PKG::libpqxx  
 )
 
 add_executable(game_server
@@ -65,11 +65,10 @@ target_link_libraries(game_server
     CONAN_PKG::boost
     Threads::Threads
     CONAN_PKG::libpq 
-    CONAN_PKG::libpqxx
+    CONAN_PKG::libpqxx  
 )
 
 add_executable(game_server_tests
-
     src/model.h
     src/model.cpp
     src/json_loader.h
@@ -91,5 +90,5 @@ target_link_libraries(game_server_tests
     CONAN_PKG::boost
     Threads::Threads
     CONAN_PKG::libpq 
-    CONAN_PKG::libpqxx   
+    CONAN_PKG::libpqxx  
 )

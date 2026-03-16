@@ -88,6 +88,12 @@ model::Game LoadGame(const std::filesystem::path& json_path,
     
     const json::array& maps_array = root.at("maps").as_array();
 
+    if (const auto* v = root.if_contains("dogRetirementTime")) {
+        dog_retirement_time = json::value_to<double>(*v);
+    } else {
+        dog_retirement_time = 60.0;   // значение по умолчанию
+}
+
     double default_speed = 1.0;
     if (const auto* v = root.if_contains("defaultDogSpeed")) {
         default_speed = json::value_to<double>(*v);
@@ -96,11 +102,6 @@ model::Game LoadGame(const std::filesystem::path& json_path,
     double default_bag_capacity = 3.0;
     if (const auto* v = root.if_contains("defaultBagCapacity")) {
         default_bag_capacity = json::value_to<double>(*v);
-    }
-
-    dog_retirement_time = 60.0;
-    if (const auto* v = root.if_contains("dogRetirementTime")) {
-        dog_retirement_time = json::value_to<double>(*v);
     }
     
     for (const auto& map_json : maps_array) {

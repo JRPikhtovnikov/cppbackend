@@ -36,18 +36,21 @@ inline void JsonFormatter(logging::record_view const& rec, logging::formatting_o
 
     json::object obj;
 
+    // timestamp
     if (auto ts = logging::extract<ptime>("TimeStamp", rec)) {
         obj["timestamp"] = boost::posix_time::to_iso_extended_string(ts.get());
     } else {
         obj["timestamp"] = "";
     }
 
+    // data (ваш keyword работает корректно)
     if (auto data = rec[additional_data]) {
         obj["data"] = data.get();
     } else {
         obj["data"] = json::object{};
     }
 
+    // message (строка сообщения хранится в атрибуте "Message")
     if (auto msg = logging::extract<std::string>("Message", rec)) {
         obj["message"] = msg.get();
     } else {

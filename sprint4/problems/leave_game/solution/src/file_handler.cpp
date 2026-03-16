@@ -73,10 +73,12 @@ void StaticFileHandler::InitMimeTypes() {
 }
 
 bool StaticFileHandler::IsStaticFileRequest(std::string_view target) const {
+    // Статические файлы - это те, которые не начинаются с /api/
     return !target.starts_with("/api/");
 }
 
 std::string StaticFileHandler::GetMimeType(std::string_view extension) const {
+    // Приводим расширение к нижнему регистру
     std::string ext_lower;
     ext_lower.reserve(extension.size());
     std::transform(extension.begin(), extension.end(), 
@@ -93,9 +95,11 @@ std::string StaticFileHandler::GetMimeType(std::string_view extension) const {
 
 bool StaticFileHandler::IsPathWithinRoot(const fs::path& path) const {
     try {
+        // Получаем канонические пути
         auto canonical_path = fs::weakly_canonical(path);
         auto canonical_root = fs::weakly_canonical(root_path_);
         
+        // Проверяем, что путь начинается с корневой директории
         auto rel_path = fs::relative(canonical_path, canonical_root);
         return !rel_path.empty() && rel_path.native()[0] != '.';
     } catch (const std::exception&) {
@@ -106,18 +110,23 @@ bool StaticFileHandler::IsPathWithinRoot(const fs::path& path) const {
 void StaticFileHandler::HandleFileRequest(std::string_view target, 
                                          std::string_view method,
                                          SendHandler& send_handler) const {
+    // Декодируем URL
     std::string decoded_path = DecodeURL(target);
     
+    // Убираем начальный слэш
     if (decoded_path.starts_with('/')) {
         decoded_path = decoded_path.substr(1);
     }
     
+    // Если путь пустой или заканчивается на /, добавляем index.html
     if (decoded_path.empty() || decoded_path.back() == '/') {
         decoded_path += "index.html";
     }
     
+    // Собираем полный путь к файлу
     fs::path file_path = root_path_ / decoded_path;
     
+    // Проверяем, что путь находится внутри корневой директории
     if (!IsPathWithinRoot(file_path)) {
         http::response<http::string_body> response{
             http::status::bad_request, 11};
@@ -128,6 +137,7 @@ void StaticFileHandler::HandleFileRequest(std::string_view target,
         return;
     }
     
+    // Проверяем существование файла
     if (!fs::exists(file_path) || !fs::is_regular_file(file_path)) {
         http::response<http::string_body> response{
             http::status::not_found, 11};
@@ -138,10 +148,12 @@ void StaticFileHandler::HandleFileRequest(std::string_view target,
         return;
     }
     
+    // Для HEAD запроса отправляем только заголовки
     if (method == "HEAD") {
         http::response<http::empty_body> response{
             http::status::ok, 11};
         
+        // Получаем расширение файла
         std::string extension = file_path.extension().string();
         response.set(http::field::content_type, GetMimeType(extension));
         response.set(http::field::content_length, 
@@ -152,6 +164,7 @@ void StaticFileHandler::HandleFileRequest(std::string_view target,
         return;
     }
     
+    // Для GET запроса читаем и отправляем файл
     std::ifstream file(file_path, std::ios::binary);
     if (!file) {
         http::response<http::string_body> response{
@@ -163,13 +176,16 @@ void StaticFileHandler::HandleFileRequest(std::string_view target,
         return;
     }
     
+    // Читаем весь файл
     std::stringstream buffer;
     buffer << file.rdbuf();
     std::string file_content = buffer.str();
     
+    // Создаем ответ
     http::response<http::string_body> response{
         http::status::ok, 11};
     
+    // Устанавливаем MIME-тип
     std::string extension = file_path.extension().string();
     response.set(http::field::content_type, GetMimeType(extension));
     response.set(http::field::content_length, 
