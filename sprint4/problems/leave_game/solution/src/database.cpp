@@ -9,7 +9,7 @@ void Database::Initialize() {
     pqxx::work tx(*conn);
     tx.exec(R"(
         CREATE TABLE IF NOT EXISTS retired_players (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            id SERIAL PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
             score INTEGER NOT NULL,
             play_time_ms INTEGER NOT NULL
