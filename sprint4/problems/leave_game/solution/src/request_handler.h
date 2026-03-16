@@ -568,7 +568,7 @@ private:
             return HandleTick(std::forward<decltype(req)>(req), std::forward<Send>(send));
         }
 
-        if (target == api::RECORDS || target == (std::string(api::RECORDS) + "/")) {
+        if (target.starts_with(api::RECORDS) || target == (std::string(api::RECORDS) + "/")) {
             return HandleRecords(std::forward<decltype(req)>(req), std::forward<Send>(send));
         }
 
