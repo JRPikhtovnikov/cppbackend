@@ -1,4 +1,5 @@
 #include "database.h"
+#include <boost/log/trivial.hpp>
 #include <chrono>
 #include <stdexcept>
 
