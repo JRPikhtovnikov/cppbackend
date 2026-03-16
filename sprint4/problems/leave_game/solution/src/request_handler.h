@@ -146,6 +146,7 @@ public:
         tokens_.RemoveByPlayerId(player_id);
 
         player->SetRetired(true);
+        BOOST_LOG_TRIVIAL(info) << "Retiring player " << player_id << " due to idle timeout";
         players_.GetAllMutable().erase(player_id);
     }
 
