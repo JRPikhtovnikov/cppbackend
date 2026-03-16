@@ -118,6 +118,7 @@ int main(int argc, const char* argv[]) {
 
         db::Database db(conn_pool);
         db.Initialize();
+        BOOST_LOG_TRIVIAL(info) << "Database initialized successfully";
 
         const auto address = net::ip::make_address("0.0.0.0");
         constexpr net::ip::port_type port = 8080;
