@@ -515,7 +515,7 @@ private:
             return HandleTick(std::forward<decltype(req)>(req), std::forward<Send>(send));
         }
 
-        if (target == api::RECORDS) {
+        if (target.starts_with(api::RECORDS)) {
             return HandleRecords(req, std::forward<Send>(send));
         }
 
@@ -1140,7 +1140,7 @@ private:
             
             // Если игрок стоит, только проверяем время бездействия
             if (speed.x == 0.0 && speed.y == 0.0) {
-                if (player.GetIdleTime() > dog_retirement_time_ms_) {
+                if (player.GetIdleTime() >= dog_retirement_time_ms_) {
                     to_remove.push_back(pid);
                 }
                 continue;
@@ -1193,7 +1193,7 @@ private:
             player.SetPos(pos);
 
             // Проверяем бездействие после движения
-            if (player.GetIdleTime() > dog_retirement_time_ms_) {
+            if (player.GetIdleTime() >= dog_retirement_time_ms_) {
                 to_remove.push_back(pid);
             }
         }
