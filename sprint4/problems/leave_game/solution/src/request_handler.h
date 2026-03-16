@@ -534,27 +534,36 @@ private:
         int start = 0;
         int max_items = 100;
 
-        // Разбор query-параметров
-        std::string_view target = req.target();
+        // Используем boost::beast::string_view вместо std::string_view
+        boost::beast::string_view target = req.target();
         auto pos = target.find('?');
-        if (pos != std::string_view::npos) {
-            std::string_view query = target.substr(pos + 1);
-            // упрощённый парсинг (можно использовать boost::urls или вручную)
-            auto parse_param = [&](std::string_view name, int& value) {
-                auto start_pos = query.find(name);
-                if (start_pos != std::string_view::npos) {
-                    auto eq_pos = query.find('=', start_pos);
-                    if (eq_pos != std::string_view::npos) {
-                        auto end_pos = query.find('&', eq_pos + 1);
-                        std::string_view sv = query.substr(eq_pos + 1, end_pos - eq_pos - 1);
-                        try {
-                            value = std::stoi(std::string(sv));
-                        } catch (...) {}
-                    }
-                }
-            };
-            parse_param("start", start);
-            parse_param("maxItems", max_items);
+        
+        if (pos != boost::beast::string_view::npos) {
+            boost::beast::string_view query = target.substr(pos + 1);
+            
+            // Преобразуем в std::string для удобства парсинга
+            std::string query_str(query.data(), query.size());
+            
+            // Простой парсинг параметров
+            size_t start_pos = query_str.find("start=");
+            if (start_pos != std::string::npos) {
+                start_pos += 6; // длина "start="
+                size_t end_pos = query_str.find('&', start_pos);
+                std::string val = query_str.substr(start_pos, end_pos - start_pos);
+                try {
+                    start = std::stoi(val);
+                } catch (...) {}
+            }
+            
+            size_t max_pos = query_str.find("maxItems=");
+            if (max_pos != std::string::npos) {
+                max_pos += 9; // длина "maxItems="
+                size_t end_pos = query_str.find('&', max_pos);
+                std::string val = query_str.substr(max_pos, end_pos - max_pos);
+                try {
+                    max_items = std::stoi(val);
+                } catch (...) {}
+            }
         }
 
         if (max_items > 100) {
@@ -566,17 +575,25 @@ private:
                                 "invalidArgument", "start must be non-negative"));
         }
 
-        auto records = db_->GetRecords(start, max_items);
-        json::array arr;
-        for (const auto& rec : records) {
-            json::object obj;
-            obj["name"] = rec.name;
-            obj["score"] = rec.score;
-            obj["playTime"] = rec.play_time;
-            arr.push_back(std::move(obj));
-        }
+        try {
+            auto records = db_->GetRecords(start, max_items);
+            
+            json::array arr;
+            for (const auto& rec : records) {
+                json::object obj;
+                obj["name"] = rec.name;
+                obj["score"] = rec.score;
+                obj["playTime"] = rec.play_time;
+                arr.push_back(std::move(obj));
+            }
 
-        send(MakeJsonResponse(http::status::ok, req, std::move(arr)));
+            send(MakeJsonResponse(http::status::ok, req, std::move(arr)));
+            
+        } catch (const std::exception& e) {
+            BOOST_LOG_TRIVIAL(error) << "Failed to get records: " << e.what();
+            send(MakeError(http::status::internal_server_error, req,
+                        "internalError", "Failed to retrieve records"));
+        }
     }
 
     template <typename Body, typename Allocator, typename Send>
