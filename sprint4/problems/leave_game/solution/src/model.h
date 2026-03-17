@@ -8,8 +8,6 @@
 #include <optional>
 #include <cctype>
 #include "loot_generator.h"
-#include <random>
-#include <unordered_map>
 #include <cstdint>
 #include "tagged.h"
 

@@ -72,7 +72,7 @@ void StaticFileHandler::InitMimeTypes() {
     };
 }
 
-bool StaticFileHandler::IsStaticFileRequest(std::string_view target) const {
+bool StaticFileHandler::IsStaticFileRequest(std::string_view target) {
     return !target.starts_with("/api/");
 }
 

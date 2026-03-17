@@ -28,7 +28,7 @@ class StaticFileHandler {
 public:
     StaticFileHandler(fs::path root_path);
     
-    bool IsStaticFileRequest(std::string_view target) const;
+    static bool IsStaticFileRequest(std::string_view target);
     
     std::string GetMimeType(std::string_view extension) const;
     

@@ -23,6 +23,7 @@
 #include <cmath>
 #include <vector>
 #include <fstream>
+#include <numeric> 
 
 namespace api {
 using boost::beast::string_view;
@@ -334,6 +335,8 @@ private:
     std::chrono::milliseconds dog_retirement_time_ms_;
     std::unique_ptr<Database> db_;
 
+    static constexpr int MAX_RECORDS_PER_PAGE = 100;
+
 private:
     void TrySaveState() {
         try {
@@ -514,7 +517,7 @@ private:
         }
 
         int start = 0;
-        int max_items = 100;
+        int max_items = MAX_RECORDS_PER_PAGE;
 
         boost::beast::string_view target = req.target();
         auto pos = target.find('?');
@@ -531,7 +534,11 @@ private:
                 std::string val = query_str.substr(start_pos, end_pos - start_pos);
                 try {
                     start = std::stoi(val);
-                } catch (...) {}
+                } catch (const std::invalid_argument& e) {
+                    BOOST_LOG_TRIVIAL(debug) << "Invalid start parameter: " << val;
+                } catch (const std::out_of_range& e) {
+                    BOOST_LOG_TRIVIAL(debug) << "Start parameter out of range: " << val;
+                }
             }
             
             size_t max_pos = query_str.find("maxItems=");
@@ -541,11 +548,15 @@ private:
                 std::string val = query_str.substr(max_pos, end_pos - max_pos);
                 try {
                     max_items = std::stoi(val);
-                } catch (...) {}
+                } catch (const std::invalid_argument& e) {
+                    BOOST_LOG_TRIVIAL(debug) << "Invalid maxItems parameter: " << val;
+                } catch (const std::out_of_range& e) {
+                    BOOST_LOG_TRIVIAL(debug) << "maxItems parameter out of range: " << val;
+                }
             }
         }
 
-        if (max_items > 100) {
+        if (max_items > MAX_RECORDS_PER_PAGE) {
             return send(MakeError(http::status::bad_request, req,
                                 "invalidArgument", "maxItems must not exceed 100"));
         }
@@ -1335,10 +1346,12 @@ private:
                 if (obj.is_office) {
                     // Сдача лута в офисе
                     if (!player->GetBag().empty()) {
-                        int total_score = 0;
-                        for (const auto& item : player->GetBag()) {
-                            total_score += item.value;
-                        }
+                        int total_score = std::accumulate(
+                            player->GetBag().begin(),
+                            player->GetBag().end(),
+                            0,
+                            [](int sum, const auto& item) { return sum + item.value; }
+                        );
                         player->AddScore(total_score);
                         player->ClearBag();
                         BOOST_LOG_TRIVIAL(debug) << "Player " << player->GetName() 
